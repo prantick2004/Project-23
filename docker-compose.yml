@@ -1,0 +1,37 @@
+services:
+
+  # ─── PostgreSQL Database ─────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: project23_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: project23_db
+      POSTGRES_USER: project23_user
+      POSTGRES_PASSWORD: project23_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U project23_user -d project23_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis (For Background Tasks) ────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: project23_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
