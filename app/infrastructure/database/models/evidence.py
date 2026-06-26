@@ -35,8 +35,8 @@ class EvidenceModel(Base):
     )
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=True)
-    activity_log: Mapped["ActivityLogModel"] = relationship(
-        "ActivityLogModel", back_populates="evidence"
+    activity_log: Mapped["ActivityLog"] = relationship(
+        "ActivityLog", back_populates="evidence"
     )
     def __repr__(self) -> str:
         return f"<Evidence {self.id}>"

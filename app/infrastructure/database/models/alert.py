@@ -37,8 +37,8 @@ class AlertModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
-    activity_log: Mapped["ActivityLogModel"] = relationship(
-        "ActivityLogModel", back_populates="alerts"
+    activity_log: Mapped["ActivityLog"] = relationship(
+        "ActivityLog", back_populates="alerts"
     )
     def __repr__(self) -> str:
         return f"<Alert {self.alert_type} - {self.severity}>"
