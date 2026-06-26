@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.infrastructure.database.connection import Base
 
-class FaceEncodingModel(Base):
+class FaceEncoding(Base):
     __tablename__ = "face_encodings"
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -24,8 +24,8 @@ class FaceEncodingModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
-    employee: Mapped["EmployeeModel"] = relationship(
-        "EmployeeModel", back_populates="face_encodings"
+    employee: Mapped["Employee"] = relationship(
+        "Employee", back_populates="face_encodings"
     )
     def __repr__(self) -> str:
         return f"<FaceEncoding employee={self.employee_id}>"

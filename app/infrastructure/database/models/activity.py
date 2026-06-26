@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.infrastructure.database.connection import Base
 from app.core.constants import ActivityType
 
-class ActivityLogModel(Base):
+class ActivityLog(Base):
     __tablename__ = "activity_logs"
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

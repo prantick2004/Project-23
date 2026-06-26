@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from app.infrastructure.database.connection import Base
 from app.core.constants import AttendanceStatus
 
-class AttendanceModel(Base):
+class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -49,8 +49,8 @@ class AttendanceModel(Base):
         DateTime(timezone=True), default=datetime.utcnow,
         onupdate=datetime.utcnow, nullable=False
     )
-    employee: Mapped["EmployeeModel"] = relationship(
-        "EmployeeModel", back_populates="attendance_records"
+    employee: Mapped["Employee"] = relationship(
+        "Employee", back_populates="attendance_records"
     )
     def __repr__(self) -> str:
         return f"<Attendance {self.employee_id} - {self.work_date}>"

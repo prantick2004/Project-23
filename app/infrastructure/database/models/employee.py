@@ -1,56 +1,35 @@
 """
-Employee ORM model.
+Employee ORM model — maps to 'employees' table in PostgreSQL.
 """
 import uuid
-from datetime import datetime, time
-from sqlalchemy import String, Boolean, DateTime, Text, Time, ForeignKey, Enum as SAEnum
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Boolean, ForeignKey, Text, func
+from sqlalchemy.dialects.postgresql import UUID, TIMESTAMPTZ
+from sqlalchemy.orm import relationship
 from app.infrastructure.database.connection import Base
-from app.core.constants import EmployeeStatus
 
-class EmployeeModel(Base):
+
+class Employee(Base):
     __tablename__ = "employees"
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    employee_code: Mapped[str] = mapped_column(
-        String(20), unique=True, nullable=False
-    )
-    full_name: Mapped[str] = mapped_column(String(150), nullable=False)
-    department_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("departments.id", ondelete="SET NULL"), nullable=True
-    )
-    designation: Mapped[str] = mapped_column(String(100), nullable=True)
-    contact_number: Mapped[str] = mapped_column(String(20), nullable=True)
-    email: Mapped[str] = mapped_column(String(254), unique=True, nullable=True)
-    status: Mapped[str] = mapped_column(
-        SAEnum(EmployeeStatus, name="employee_status"),
-        default=EmployeeStatus.ACTIVE, nullable=False
-    )
-    profile_image_path: Mapped[str] = mapped_column(String(512), nullable=True)
-    face_encoded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    work_shift_start: Mapped[time] = mapped_column(Time, nullable=True)
-    work_shift_end: Mapped[time] = mapped_column(Time, nullable=True)
-    notes: Mapped[str] = mapped_column(Text, nullable=True)
-    registered_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow,
-        onupdate=datetime.utcnow, nullable=False
-    )
-    department: Mapped["DepartmentModel"] = relationship(
-        "DepartmentModel", back_populates="employees"
-    )
-    face_encodings: Mapped[list] = relationship(
-        "FaceEncodingModel", back_populates="employee",
-        cascade="all, delete-orphan"
-    )
-    attendance_records: Mapped[list] = relationship(
-        "AttendanceModel", back_populates="employee",
-        cascade="all, delete-orphan"
-    )
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False)
+    employee_code = Column(String(20), unique=True, nullable=False, index=True)
+    full_name     = Column(String(100), nullable=False)
+    position      = Column(String(100), nullable=True)
+    email         = Column(String(255), unique=True, nullable=True, index=True)
+    phone         = Column(String(20), nullable=True)
+    department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"), nullable=True, index=True)
+    shift_start_time = Column(String(5), nullable=True)
+    shift_end_time   = Column(String(5), nullable=True)
+    status       = Column(String(20), nullable=False, default="active", index=True)
+    face_encoded = Column(Boolean, nullable=False, default=False)
+    photo_path   = Column(Text, nullable=True)
+    created_at   = Column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+    updated_at   = Column(TIMESTAMPTZ, nullable=True, onupdate=func.now())
+
+    department         = relationship("Department", back_populates="employees")
+    face_encodings     = relationship("FaceEncoding", back_populates="employee", cascade="all, delete-orphan")
+    attendance_records = relationship("AttendanceRecord", back_populates="employee")
+    activity_logs      = relationship("ActivityLog", back_populates="employee")
+
     def __repr__(self) -> str:
-        return f"<Employee {self.employee_code} - {self.full_name}>"
+        return f"<Employee {self.employee_code} — {self.full_name}>"
