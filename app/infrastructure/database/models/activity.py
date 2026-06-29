@@ -37,12 +37,15 @@ class ActivityLog(Base):
     detected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
+    employee: Mapped[list] = relationship(
+        "Employee", back_populates="activity_logs"
+    )
     evidence: Mapped[list] = relationship(
-        "EvidenceModel", back_populates="activity_log",
+        "Evidence", back_populates="activity_log",
         cascade="all, delete-orphan"
     )
     alerts: Mapped[list] = relationship(
-        "AlertModel", back_populates="activity_log"
+        "Alert", back_populates="activity_log"
     )
     def __repr__(self) -> str:
         return f"<ActivityLog {self.activity_type} at {self.detected_at}>"
