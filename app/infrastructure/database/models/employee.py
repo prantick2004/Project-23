@@ -2,8 +2,9 @@
 Employee ORM model — maps to 'employees' table in PostgreSQL.
 """
 import uuid
-from sqlalchemy import Column, String, Boolean, ForeignKey, Text, func
-from sqlalchemy.dialects.postgresql import UUID, TIMESTAMPTZ
+from datetime import datetime
+from sqlalchemy import Column, String, Boolean, ForeignKey, Text, DateTime, func
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.infrastructure.database.connection import Base
 
@@ -23,8 +24,8 @@ class Employee(Base):
     status       = Column(String(20), nullable=False, default="active", index=True)
     face_encoded = Column(Boolean, nullable=False, default=False)
     photo_path   = Column(Text, nullable=True)
-    created_at   = Column(TIMESTAMPTZ, nullable=False, server_default=func.now())
-    updated_at   = Column(TIMESTAMPTZ, nullable=True, onupdate=func.now())
+    created_at   = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at   = Column(DateTime(timezone=True), nullable=True, onupdate=datetime.utcnow)
 
     department         = relationship("Department", back_populates="employees")
     face_encodings     = relationship("FaceEncoding", back_populates="employee", cascade="all, delete-orphan")

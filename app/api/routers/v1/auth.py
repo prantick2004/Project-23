@@ -6,6 +6,7 @@ Authentication routes for Project-23.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
 from app.infrastructure.database.connection import get_db
 from app.infrastructure.database.models.user import UserModel
 from app.core.security import (
@@ -17,37 +18,33 @@ from app.api.schemas.auth import (
     LoginRequest, TokenResponse,
     RefreshRequest, UserResponse
 )
+from app.api.dependencies import get_current_active_user
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router   = APIRouter(prefix="/auth", tags=["Authentication"])
 settings = get_settings()
 
 
 @router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     """Login with username and password — returns JWT tokens."""
-
-    # Find user by username
     result = await db.execute(
         select(UserModel).where(UserModel.username == request.username)
     )
     user = result.scalar_one_or_none()
 
-    # Verify user exists and password is correct
     if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password"
         )
-
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is disabled"
         )
 
-    # Create tokens
-    token_data = {"sub": str(user.id), "role": user.role}
-    access_token = create_access_token(token_data)
+    token_data    = {"sub": str(user.id), "role": user.role}
+    access_token  = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
     return TokenResponse(
@@ -89,9 +86,6 @@ async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(db: AsyncSession = Depends(get_db)):
-    """Get current user — placeholder until auth middleware is added."""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Auth middleware coming in next step"
-    )
+def get_me(current_user=Depends(get_current_active_user)):
+    """Get current logged in user info."""
+    return current_user

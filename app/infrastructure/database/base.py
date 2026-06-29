@@ -10,7 +10,7 @@ from app.infrastructure.database.models.face_encoding import FaceEncoding  # noq
 from app.infrastructure.database.models.camera import CameraModel  # noqa: F401
 from app.infrastructure.database.models.attendance import AttendanceRecord  # noqa: F401
 from app.infrastructure.database.models.activity import ActivityLog  # noqa: F401
-from app.infrastructure.database.models.evidence import EvidenceModel  # noqa: F401
-from app.infrastructure.database.models.alert import AlertModel  # noqa: F401
+from app.infrastructure.database.models.evidence import Evidence  # noqa: F401
+from app.infrastructure.database.models.alert import Alert  # noqa: F401
 from app.infrastructure.database.models.audit import AuditLogModel  # noqa: F401
 from app.infrastructure.database.models.settings import SystemSettingModel  # noqa: F401
