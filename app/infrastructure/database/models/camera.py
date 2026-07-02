@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.infrastructure.database.connection import Base
 from app.core.constants import CameraType, CameraStatus
 
-class CameraModel(Base):
+class Camera(Base):
     __tablename__ = "cameras"
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
