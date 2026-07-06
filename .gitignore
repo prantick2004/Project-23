@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+.env
+media/
+storage/
+models/
+logs/
+*.log
+.pytest_cache/
+alembic/versions/__pycache__/
+.DS_Store
