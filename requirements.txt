@@ -3,8 +3,8 @@ alembic==1.13.1
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.14.1
-async-timeout==5.0.1
 asyncpg==0.29.0
+async-timeout==5.0.1
 bcrypt==3.2.2
 certifi==2026.6.17
 cffi==2.0.0
@@ -21,11 +21,13 @@ httpcore==1.0.9
 httptools==0.8.0
 httpx==0.28.1
 idna==3.18
+imutils==0.5.4
 Jinja2==3.1.6
 Mako==1.3.12
 markdown-it-py==4.2.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
+opencv-python==4.9.0.80
 orjson==3.11.9
 passlib==1.7.4
 pillow==10.3.0
@@ -33,8 +35,8 @@ psycopg2-binary==2.9.9
 pyasn1==0.6.3
 pycparser==3.0
 pydantic==2.7.0
-pydantic-settings==2.2.0
 pydantic_core==2.18.1
+pydantic-settings==2.2.0
 Pygments==2.20.0
 python-dotenv==1.0.1
 python-jose==3.3.0

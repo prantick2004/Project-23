@@ -15,6 +15,8 @@ import app.infrastructure.database.base  # noqa: F401 — load all models
 from app.api.routers.v1.auth import router as auth_router
 from app.api.routers.v1.employees import router as employee_router
 from app.api.routers.v1.departments import router as department_router
+from app.api.routers.v1.cameras import router as camera_router
+from app.infrastructure.camera.stream_manager import stream_manager
 
 setup_logging()
 logger   = get_logger(__name__)
@@ -45,6 +47,7 @@ app.mount("/media", StaticFiles(directory="media"), name="media")
 app.include_router(auth_router,       prefix=AppConstants.API_V1_PREFIX)
 app.include_router(employee_router,   prefix=AppConstants.API_V1_PREFIX)
 app.include_router(department_router, prefix=AppConstants.API_V1_PREFIX)
+app.include_router(camera_router,      prefix=AppConstants.API_V1_PREFIX)
 
 @app.get("/")
 async def root():
@@ -58,3 +61,9 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    """Stop all running camera threads cleanly when the server shuts down."""
+    stream_manager.stop_all()
