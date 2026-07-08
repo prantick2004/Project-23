@@ -16,6 +16,7 @@ from app.api.routers.v1.auth import router as auth_router
 from app.api.routers.v1.employees import router as employee_router
 from app.api.routers.v1.departments import router as department_router
 from app.api.routers.v1.cameras import router as camera_router
+from app.api.websockets.camera_stream import router as camera_stream_router
 from app.infrastructure.camera.stream_manager import stream_manager
 
 setup_logging()
@@ -48,6 +49,7 @@ app.include_router(auth_router,       prefix=AppConstants.API_V1_PREFIX)
 app.include_router(employee_router,   prefix=AppConstants.API_V1_PREFIX)
 app.include_router(department_router, prefix=AppConstants.API_V1_PREFIX)
 app.include_router(camera_router,      prefix=AppConstants.API_V1_PREFIX)
+app.include_router(camera_stream_router)
 
 @app.get("/")
 async def root():
