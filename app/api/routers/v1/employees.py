@@ -9,8 +9,10 @@ from app.api.dependencies import get_db, get_current_active_user
 from app.services.employee_service import EmployeeService
 from app.schemas.employee import (
     EmployeeCreate, EmployeeUpdate,
-    EmployeeResponse, EmployeeListResponse
+    EmployeeResponse, EmployeeListResponse,
+    EmployeeEncodeResponse
 )
+from app.services.face_encoding_service import FaceEncodingService
 
 router = APIRouter(prefix="/employees", tags=["Employees"])
 
@@ -121,4 +123,18 @@ async def upload_photo(
         service = EmployeeService(db)
         return await service.upload_photo(str(employee_id), file)
     except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/{employee_id}/encode", response_model=EmployeeEncodeResponse)
+async def encode_employee_face(
+    employee_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """Generate face encoding from employee's stored photo."""
+    try:
+        service = FaceEncodingService(db)
+        return await service.encode_employee(str(employee_id))
+    except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

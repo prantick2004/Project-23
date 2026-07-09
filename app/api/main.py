@@ -18,6 +18,8 @@ from app.api.routers.v1.departments import router as department_router
 from app.api.routers.v1.cameras import router as camera_router
 from app.api.websockets.camera_stream import router as camera_stream_router
 from app.infrastructure.camera.stream_manager import stream_manager
+from app.infrastructure.database.connection import AsyncSessionFactory
+from app.services.face_encoding_service import FaceEncodingService
 
 setup_logging()
 logger   = get_logger(__name__)
@@ -63,6 +65,18 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    """Load AI models and warm the face-encoding cache from DB."""
+    from app.infrastructure.ai.model_registry import model_registry
+    model_registry.load()
+
+    async with AsyncSessionFactory() as session:
+        service = FaceEncodingService(session)
+        count = await service.refresh_cache_from_db()
+        logger.info("encoding_cache_ready", total_encodings=count)
 
 
 @app.on_event("shutdown")

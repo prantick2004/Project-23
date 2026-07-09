@@ -14,6 +14,9 @@ import structlog
 
 from app.infrastructure.camera.base_camera import BaseCameraStream
 from app.infrastructure.camera.camera_factory import CameraFactory
+from app.infrastructure.ai.face_recognition.face_detector import face_detector
+from app.infrastructure.ai.face_recognition.face_encoder import face_encoder
+from app.infrastructure.ai.face_recognition.face_recognizer import face_recognizer, RecognitionResult
 
 logger = structlog.get_logger(__name__)
 
@@ -29,6 +32,9 @@ class _CameraWorker:
         self.is_running: bool = False
         self._lock = threading.Lock()
         self._thread: Optional[threading.Thread] = None
+        self.latest_recognitions: list = []  # list[RecognitionResult] from most recent check
+        self._read_count: int = 0
+        self._recognition_every_n_reads: int = 10  # ~3x/sec at 30 reads/sec loop
 
     def start(self) -> bool:
         if not self.stream.connect():
@@ -48,11 +54,41 @@ class _CameraWorker:
                 with self._lock:
                     self.latest_frame = frame
                     self.last_heartbeat = datetime.now(timezone.utc)
+                self._read_count += 1
+                if self._read_count % self._recognition_every_n_reads == 0:
+                    self._run_recognition(frame)
             time.sleep(0.03)  # ~30 reads/sec cap; actual FPS limited by camera
 
     def get_latest_frame(self) -> Optional[np.ndarray]:
         with self._lock:
             return None if self.latest_frame is None else self.latest_frame.copy()
+
+    def _run_recognition(self, frame: np.ndarray) -> None:
+        """Detect + recognize faces in one frame. Runs inside the camera thread."""
+        try:
+            boxes = face_detector.detect(frame)
+            results: list = []
+            for box in boxes:
+                encoding = face_encoder.encode(frame, box)
+                if encoding is None:
+                    continue
+                result = face_recognizer.recognize(encoding)
+                results.append({
+                    "box": box,
+                    "employee_id": str(result.employee_id) if result.employee_id else None,
+                    "confidence": result.confidence,
+                    "is_match": result.is_match,
+                })
+            with self._lock:
+                self.latest_recognitions = results
+            if results:
+                logger.info("faces_recognized", camera_id=self.camera_id, count=len(results))
+        except Exception as e:
+            logger.error("recognition_failed", camera_id=self.camera_id, error=str(e))
+
+    def get_latest_recognitions(self) -> list:
+        with self._lock:
+            return list(self.latest_recognitions)
 
     def stop(self) -> None:
         self.is_running = False
@@ -96,6 +132,11 @@ class CameraStreamManager:
         """Get latest cached frame for a camera, or None if not running."""
         worker = self._workers.get(camera_id)
         return worker.get_latest_frame() if worker else None
+
+    def get_recognitions(self, camera_id: str) -> list:
+        """Get latest per-frame recognition results for a camera, or empty list."""
+        worker = self._workers.get(camera_id)
+        return worker.get_latest_recognitions() if worker else []
 
     def is_running(self, camera_id: str) -> bool:
         worker = self._workers.get(camera_id)

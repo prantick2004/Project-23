@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db, get_current_active_user
 from app.services.camera_service import CameraService
+from app.infrastructure.camera.stream_manager import stream_manager
 from app.schemas.camera import (
     CameraCreate, CameraUpdate,
     CameraResponse, CameraListResponse,
@@ -144,3 +145,21 @@ async def get_camera_snapshot(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Frame encoding failed")
 
     return Response(content=buffer.tobytes(), media_type="image/jpeg")
+
+
+@router.get("/{camera_id}/recognitions")
+async def get_camera_recognitions(
+    camera_id: UUID,
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Returns the most recent face recognition results for this camera
+    (recomputed roughly every ~3 frames/sec inside the camera thread).
+    Each entry: box, employee_id (or null if unknown), confidence, is_match.
+    """
+    results = stream_manager.get_recognitions(str(camera_id))
+    return {
+        "camera_id": str(camera_id),
+        "faces_detected": len(results),
+        "recognitions": results,
+    }

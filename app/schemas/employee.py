@@ -62,3 +62,11 @@ class EmployeeListResponse(BaseModel):
     """Schema for paginated employee list."""
     total:     int
     employees: list[EmployeeResponse]
+
+
+class EmployeeEncodeResponse(BaseModel):
+    """Schema for face-encoding generation response."""
+    employee_id:   str
+    face_encoded:  bool
+    quality_score: float
+    message:       str
