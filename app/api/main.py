@@ -16,8 +16,10 @@ from app.api.routers.v1.auth import router as auth_router
 from app.api.routers.v1.employees import router as employee_router
 from app.api.routers.v1.departments import router as department_router
 from app.api.routers.v1.cameras import router as camera_router
+from app.api.routers.v1.attendance import router as attendance_router
 from app.api.websockets.camera_stream import router as camera_stream_router
 from app.infrastructure.camera.stream_manager import stream_manager
+from app.infrastructure.camera.main_loop import set_main_loop
 from app.infrastructure.database.connection import AsyncSessionFactory
 from app.services.face_encoding_service import FaceEncodingService
 
@@ -51,6 +53,7 @@ app.include_router(auth_router,       prefix=AppConstants.API_V1_PREFIX)
 app.include_router(employee_router,   prefix=AppConstants.API_V1_PREFIX)
 app.include_router(department_router, prefix=AppConstants.API_V1_PREFIX)
 app.include_router(camera_router,      prefix=AppConstants.API_V1_PREFIX)
+app.include_router(attendance_router,  prefix=AppConstants.API_V1_PREFIX)
 app.include_router(camera_stream_router)
 
 @app.get("/")
@@ -69,7 +72,10 @@ async def health():
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    """Load AI models and warm the face-encoding cache from DB."""
+    """Load AI models, warm the face-encoding cache from DB, capture main event loop."""
+    import asyncio
+    set_main_loop(asyncio.get_running_loop())
+
     from app.infrastructure.ai.model_registry import model_registry
     model_registry.load()
 

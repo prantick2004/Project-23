@@ -4,16 +4,19 @@ Each camera runs in its own daemon thread reading frames continuously.
 API handlers never call cv2 directly — they read the latest cached frame
 from here, keeping the asyncio event loop unblocked.
 """
+import asyncio
 import threading
 import time
 from datetime import datetime, timezone
 from typing import Optional, Dict
+from uuid import UUID
 
 import numpy as np
 import structlog
 
 from app.infrastructure.camera.base_camera import BaseCameraStream
 from app.infrastructure.camera.camera_factory import CameraFactory
+from app.infrastructure.camera.main_loop import get_main_loop
 from app.infrastructure.ai.face_recognition.face_detector import face_detector
 from app.infrastructure.ai.face_recognition.face_encoder import face_encoder
 from app.infrastructure.ai.face_recognition.face_recognizer import face_recognizer, RecognitionResult
@@ -21,18 +24,54 @@ from app.infrastructure.ai.face_recognition.face_recognizer import face_recogniz
 logger = structlog.get_logger(__name__)
 
 
+async def _process_attendance_async(camera_id: str, employee_id: str, confidence: float) -> None:
+    """
+    Runs on the MAIN event loop (scheduled via run_coroutine_threadsafe).
+    Opens its own DB session — separate from any request-scoped session.
+    """
+    from app.infrastructure.database.connection import AsyncSessionFactory
+    from app.repositories.employee_repository import EmployeeRepository
+    from app.services.attendance_service import AttendanceService
+
+    async with AsyncSessionFactory() as session:
+        try:
+            emp_repo = EmployeeRepository(session)
+            employee = await emp_repo.get_by_id(employee_id)
+            if employee is None:
+                return
+            service = AttendanceService(session)
+            result = await service.process_recognition(
+                employee=employee,
+                camera_id=UUID(camera_id),
+                timestamp=datetime.now(timezone.utc),
+                confidence=confidence,
+            )
+            if result is not None:
+                logger.info(
+                    "attendance_event",
+                    employee_id=employee_id,
+                    camera_id=camera_id,
+                    check_in=str(result.check_in_time),
+                    check_out=str(result.check_out_time),
+                    status=str(result.status),
+                )
+        except Exception as e:
+            logger.error("attendance_processing_failed", employee_id=employee_id, error=str(e))
+
+
 class _CameraWorker:
     """Internal per-camera thread wrapper. Holds latest frame + status."""
 
-    def __init__(self, camera_id: str, stream: BaseCameraStream) -> None:
+    def __init__(self, camera_id: str, stream: BaseCameraStream, is_attendance_cam: bool = False) -> None:
         self.camera_id = camera_id
         self.stream = stream
+        self.is_attendance_cam = is_attendance_cam
         self.latest_frame: Optional[np.ndarray] = None
         self.last_heartbeat: Optional[datetime] = None
         self.is_running: bool = False
         self._lock = threading.Lock()
         self._thread: Optional[threading.Thread] = None
-        self.latest_recognitions: list = []  # list[RecognitionResult] from most recent check
+        self.latest_recognitions: list = []
         self._read_count: int = 0
         self._recognition_every_n_reads: int = 10  # ~3x/sec at 30 reads/sec loop
 
@@ -79,12 +118,26 @@ class _CameraWorker:
                     "confidence": result.confidence,
                     "is_match": result.is_match,
                 })
+                if self.is_attendance_cam and result.is_match and result.employee_id:
+                    self._dispatch_attendance(str(result.employee_id), result.confidence)
+
             with self._lock:
                 self.latest_recognitions = results
             if results:
                 logger.info("faces_recognized", camera_id=self.camera_id, count=len(results))
         except Exception as e:
             logger.error("recognition_failed", camera_id=self.camera_id, error=str(e))
+
+    def _dispatch_attendance(self, employee_id: str, confidence: float) -> None:
+        """Schedule the async attendance update on the main event loop from this thread."""
+        loop = get_main_loop()
+        if loop is None:
+            logger.warning("attendance_dispatch_skipped_no_loop", camera_id=self.camera_id)
+            return
+        asyncio.run_coroutine_threadsafe(
+            _process_attendance_async(self.camera_id, employee_id, confidence),
+            loop,
+        )
 
     def get_latest_recognitions(self) -> list:
         with self._lock:
@@ -107,13 +160,20 @@ class CameraStreamManager:
     def __init__(self) -> None:
         self._workers: Dict[str, _CameraWorker] = {}
 
-    def start_camera(self, camera_id: str, camera_type: str, connection_string: str, camera_code: str) -> bool:
+    def start_camera(
+        self,
+        camera_id: str,
+        camera_type: str,
+        connection_string: str,
+        camera_code: str,
+        is_attendance_cam: bool = False,
+    ) -> bool:
         """Start a camera by ID. No-op (returns True) if already running."""
         if camera_id in self._workers and self._workers[camera_id].is_running:
             return True
 
         stream = CameraFactory.create_camera(camera_type, connection_string, camera_code)
-        worker = _CameraWorker(camera_id, stream)
+        worker = _CameraWorker(camera_id, stream, is_attendance_cam=is_attendance_cam)
         started = worker.start()
         if started:
             self._workers[camera_id] = worker
