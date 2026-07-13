@@ -10,3 +10,9 @@ logs/
 .pytest_cache/
 alembic/versions/__pycache__/
 .DS_Store
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.avi
+!docs/**/*.png
