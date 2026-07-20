@@ -94,3 +94,4 @@ class AppConstants:
     FRAME_BUFFER_SIZE      = 30    # frames kept in camera buffer
     VIDEO_CLIP_DURATION    = 10    # seconds to record on event
     ATTENDANCE_COOLDOWN_MINUTES = 5   # suppress duplicate checkin/checkout within this window
+    ACTIVITY_COOLDOWN_MINUTES   = 10  # suppress duplicate activity events per employee+type+camera

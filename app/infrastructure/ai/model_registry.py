@@ -15,6 +15,8 @@ import numpy as np
 import face_recognition
 import structlog
 
+from app.infrastructure.ai.activity_detection.yolo_detector import yolo_detector
+
 logger = structlog.get_logger(__name__)
 
 
@@ -42,6 +44,10 @@ class ModelRegistry:
         logger.info("model_registry_loading")
         dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
         face_recognition.face_locations(dummy_frame, model="hog")
+
+        # Phase 7: load YOLOv8n weights for activity detection
+        yolo_detector.load()
+
         self._loaded = True
         logger.info("model_registry_loaded")
 

@@ -163,3 +163,30 @@ async def get_camera_recognitions(
         "faces_detected": len(results),
         "recognitions": results,
     }
+
+
+@router.get("/{camera_id}/activities")
+async def get_camera_activities(
+    camera_id: UUID,
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Returns the most recent raw activity-detection results for this camera
+    (recomputed roughly every ~3 frames/sec inside the camera thread, same
+    cadence as /recognitions). These are pre-cooldown raw detections, not
+    the deduped DB records -- use GET /activities for the persisted log.
+    """
+    events = stream_manager.get_activities(str(camera_id))
+    return {
+        "camera_id": str(camera_id),
+        "events_detected": len(events),
+        "activities": [
+            {
+                "activity_type": e["activity_type"].value,
+                "confidence_score": e["confidence_score"],
+                "bounding_box": e.get("bounding_box"),
+                "description": e.get("description"),
+            }
+            for e in events
+        ],
+    }

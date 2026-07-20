@@ -20,6 +20,7 @@ from app.infrastructure.camera.main_loop import get_main_loop
 from app.infrastructure.ai.face_recognition.face_detector import face_detector
 from app.infrastructure.ai.face_recognition.face_encoder import face_encoder
 from app.infrastructure.ai.face_recognition.face_recognizer import face_recognizer, RecognitionResult
+from app.infrastructure.ai.activity_detection.activity_analyzer import activity_analyzer
 
 logger = structlog.get_logger(__name__)
 
@@ -59,19 +60,69 @@ async def _process_attendance_async(camera_id: str, employee_id: str, confidence
             logger.error("attendance_processing_failed", employee_id=employee_id, error=str(e))
 
 
+async def _process_activity_async(
+    camera_id: str,
+    activity_type: str,
+    confidence_score: float,
+    bounding_box: dict,
+    description: str,
+    employee_id: str = None,
+    duration_seconds: int = None,
+) -> None:
+    """
+    Runs on the MAIN event loop (scheduled via run_coroutine_threadsafe).
+    Opens its own DB session, same pattern as _process_attendance_async.
+    """
+    from app.infrastructure.database.connection import AsyncSessionFactory
+    from app.services.activity_service import ActivityService
+    from app.core.constants import ActivityType
+
+    async with AsyncSessionFactory() as session:
+        try:
+            service = ActivityService(session)
+            result = await service.process_detection(
+                camera_id=UUID(camera_id),
+                activity_type=ActivityType[activity_type],
+                confidence_score=confidence_score,
+                bounding_box=bounding_box,
+                description=description,
+                employee_id=UUID(employee_id) if employee_id else None,
+                duration_seconds=duration_seconds,
+            )
+            if result is not None:
+                logger.info(
+                    "activity_event",
+                    camera_id=camera_id,
+                    activity_type=activity_type,
+                    employee_id=employee_id,
+                )
+        except Exception as e:
+            logger.error("activity_processing_failed", camera_id=camera_id, error=str(e))
+
+
 class _CameraWorker:
     """Internal per-camera thread wrapper. Holds latest frame + status."""
 
-    def __init__(self, camera_id: str, stream: BaseCameraStream, is_attendance_cam: bool = False) -> None:
+    def __init__(
+        self,
+        camera_id: str,
+        stream: BaseCameraStream,
+        is_attendance_cam: bool = False,
+        is_activity_cam: bool = False,
+        zone_config: Optional[dict] = None,
+    ) -> None:
         self.camera_id = camera_id
         self.stream = stream
         self.is_attendance_cam = is_attendance_cam
+        self.is_activity_cam = is_activity_cam
+        self.zone_config = zone_config
         self.latest_frame: Optional[np.ndarray] = None
         self.last_heartbeat: Optional[datetime] = None
         self.is_running: bool = False
         self._lock = threading.Lock()
         self._thread: Optional[threading.Thread] = None
         self.latest_recognitions: list = []
+        self.latest_activities: list = []
         self._read_count: int = 0
         self._recognition_every_n_reads: int = 10  # ~3x/sec at 30 reads/sec loop
 
@@ -96,6 +147,8 @@ class _CameraWorker:
                 self._read_count += 1
                 if self._read_count % self._recognition_every_n_reads == 0:
                     self._run_recognition(frame)
+                    if self.is_activity_cam:
+                        self._run_activity_detection(frame)
             time.sleep(0.03)  # ~30 reads/sec cap; actual FPS limited by camera
 
     def get_latest_frame(self) -> Optional[np.ndarray]:
@@ -139,9 +192,49 @@ class _CameraWorker:
             loop,
         )
 
+    def _run_activity_detection(self, frame: np.ndarray) -> None:
+        """Run YOLO-based activity detection on one frame. Runs inside camera thread."""
+        try:
+            events = activity_analyzer.analyze_frame(
+                camera_id=self.camera_id,
+                frame_bgr=frame,
+                zone_config=self.zone_config,
+            )
+            with self._lock:
+                self.latest_activities = events
+            for event in events:
+                self._dispatch_activity(event)
+            if events:
+                logger.info("activities_detected", camera_id=self.camera_id, count=len(events))
+        except Exception as e:
+            logger.error("activity_detection_failed", camera_id=self.camera_id, error=str(e))
+
+    def _dispatch_activity(self, event: dict) -> None:
+        """Schedule the async activity-log write on the main event loop from this thread."""
+        loop = get_main_loop()
+        if loop is None:
+            logger.warning("activity_dispatch_skipped_no_loop", camera_id=self.camera_id)
+            return
+        asyncio.run_coroutine_threadsafe(
+            _process_activity_async(
+                camera_id=self.camera_id,
+                activity_type=event["activity_type"].name,
+                confidence_score=event["confidence_score"],
+                bounding_box=event.get("bounding_box"),
+                description=event.get("description"),
+                employee_id=None,  # activity events are not tied to a recognized employee yet
+                duration_seconds=event.get("duration_seconds"),
+            ),
+            loop,
+        )
+
     def get_latest_recognitions(self) -> list:
         with self._lock:
             return list(self.latest_recognitions)
+
+    def get_latest_activities(self) -> list:
+        with self._lock:
+            return list(self.latest_activities)
 
     def stop(self) -> None:
         self.is_running = False
@@ -167,13 +260,20 @@ class CameraStreamManager:
         connection_string: str,
         camera_code: str,
         is_attendance_cam: bool = False,
+        is_activity_cam: bool = False,
+        zone_config: Optional[dict] = None,
     ) -> bool:
         """Start a camera by ID. No-op (returns True) if already running."""
         if camera_id in self._workers and self._workers[camera_id].is_running:
             return True
 
         stream = CameraFactory.create_camera(camera_type, connection_string, camera_code)
-        worker = _CameraWorker(camera_id, stream, is_attendance_cam=is_attendance_cam)
+        worker = _CameraWorker(
+            camera_id, stream,
+            is_attendance_cam=is_attendance_cam,
+            is_activity_cam=is_activity_cam,
+            zone_config=zone_config,
+        )
         started = worker.start()
         if started:
             self._workers[camera_id] = worker
@@ -197,6 +297,11 @@ class CameraStreamManager:
         """Get latest per-frame recognition results for a camera, or empty list."""
         worker = self._workers.get(camera_id)
         return worker.get_latest_recognitions() if worker else []
+
+    def get_activities(self, camera_id: str) -> list:
+        """Get latest per-frame activity detection results for a camera, or empty list."""
+        worker = self._workers.get(camera_id)
+        return worker.get_latest_activities() if worker else []
 
     def is_running(self, camera_id: str) -> bool:
         worker = self._workers.get(camera_id)

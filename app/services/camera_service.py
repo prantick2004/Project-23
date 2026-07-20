@@ -81,6 +81,8 @@ class CameraService:
             connection_string=camera.connection_string,
             camera_code=camera.camera_code,
             is_attendance_cam=camera.is_attendance_cam,
+            is_activity_cam=camera.is_activity_cam,
+            zone_config=camera.zone_config,
         )
         new_status = CameraStatus.ONLINE.value if started else CameraStatus.ERROR.value
         await self.camera_repo.update_status(camera_id, new_status)

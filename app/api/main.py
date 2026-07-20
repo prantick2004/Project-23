@@ -17,6 +17,7 @@ from app.api.routers.v1.employees import router as employee_router
 from app.api.routers.v1.departments import router as department_router
 from app.api.routers.v1.cameras import router as camera_router
 from app.api.routers.v1.attendance import router as attendance_router
+from app.api.routers.v1.activities import router as activity_router
 from app.api.websockets.camera_stream import router as camera_stream_router
 from app.infrastructure.camera.stream_manager import stream_manager
 from app.infrastructure.camera.main_loop import set_main_loop
@@ -54,6 +55,7 @@ app.include_router(employee_router,   prefix=AppConstants.API_V1_PREFIX)
 app.include_router(department_router, prefix=AppConstants.API_V1_PREFIX)
 app.include_router(camera_router,      prefix=AppConstants.API_V1_PREFIX)
 app.include_router(attendance_router,  prefix=AppConstants.API_V1_PREFIX)
+app.include_router(activity_router,    prefix=AppConstants.API_V1_PREFIX)
 app.include_router(camera_stream_router)
 
 @app.get("/")
