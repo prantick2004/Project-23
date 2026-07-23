@@ -68,21 +68,29 @@ async def _process_activity_async(
     description: str,
     employee_id: str = None,
     duration_seconds: int = None,
+    camera_code: str = "",
+    frame_bgr: np.ndarray = None,
 ) -> None:
     """
     Runs on the MAIN event loop (scheduled via run_coroutine_threadsafe).
     Opens its own DB session, same pattern as _process_attendance_async.
+    On a successful (non-cooldown-suppressed) activity log, also captures
+    evidence (screenshot) and creates + broadcasts an alert — Phase 8.
     """
     from app.infrastructure.database.connection import AsyncSessionFactory
     from app.services.activity_service import ActivityService
+    from app.services.evidence_service import EvidenceService
+    from app.services.alert_service import AlertService
+    from app.api.websockets.alert_stream import alert_broadcaster
     from app.core.constants import ActivityType
 
     async with AsyncSessionFactory() as session:
         try:
             service = ActivityService(session)
+            activity_enum = ActivityType[activity_type]
             result = await service.process_detection(
                 camera_id=UUID(camera_id),
-                activity_type=ActivityType[activity_type],
+                activity_type=activity_enum,
                 confidence_score=confidence_score,
                 bounding_box=bounding_box,
                 description=description,
@@ -96,6 +104,35 @@ async def _process_activity_async(
                     activity_type=activity_type,
                     employee_id=employee_id,
                 )
+
+                if frame_bgr is not None:
+                    evidence_service = EvidenceService(session)
+                    await evidence_service.capture_evidence(
+                        activity_log_id=result.id,
+                        camera_id=UUID(camera_id),
+                        activity_type=activity_type,
+                        frame_bgr=frame_bgr,
+                        employee_id=UUID(employee_id) if employee_id else None,
+                    )
+
+                alert_service = AlertService(session)
+                alert = await alert_service.create_alert(
+                    activity_log_id=result.id,
+                    activity_type=activity_enum,
+                    camera_code=camera_code or camera_id,
+                    employee_name=None,
+                )
+
+                await alert_broadcaster.broadcast({
+                    "type": "new_alert",
+                    "payload": {
+                        "id": str(alert.id),
+                        "severity": alert.severity.value,
+                        "title": alert.title,
+                        "camera": camera_code or camera_id,
+                        "timestamp": alert.created_at.isoformat(),
+                    },
+                })
         except Exception as e:
             logger.error("activity_processing_failed", camera_id=camera_id, error=str(e))
 
@@ -107,12 +144,14 @@ class _CameraWorker:
         self,
         camera_id: str,
         stream: BaseCameraStream,
+        camera_code: str = "",
         is_attendance_cam: bool = False,
         is_activity_cam: bool = False,
         zone_config: Optional[dict] = None,
     ) -> None:
         self.camera_id = camera_id
         self.stream = stream
+        self.camera_code = camera_code
         self.is_attendance_cam = is_attendance_cam
         self.is_activity_cam = is_activity_cam
         self.zone_config = zone_config
@@ -203,13 +242,13 @@ class _CameraWorker:
             with self._lock:
                 self.latest_activities = events
             for event in events:
-                self._dispatch_activity(event)
+                self._dispatch_activity(event, frame)
             if events:
                 logger.info("activities_detected", camera_id=self.camera_id, count=len(events))
         except Exception as e:
             logger.error("activity_detection_failed", camera_id=self.camera_id, error=str(e))
 
-    def _dispatch_activity(self, event: dict) -> None:
+    def _dispatch_activity(self, event: dict, frame: np.ndarray) -> None:
         """Schedule the async activity-log write on the main event loop from this thread."""
         loop = get_main_loop()
         if loop is None:
@@ -218,12 +257,14 @@ class _CameraWorker:
         asyncio.run_coroutine_threadsafe(
             _process_activity_async(
                 camera_id=self.camera_id,
+                camera_code=self.camera_code,
                 activity_type=event["activity_type"].name,
                 confidence_score=event["confidence_score"],
                 bounding_box=event.get("bounding_box"),
                 description=event.get("description"),
                 employee_id=None,  # activity events are not tied to a recognized employee yet
                 duration_seconds=event.get("duration_seconds"),
+                frame_bgr=frame.copy(),
             ),
             loop,
         )
@@ -270,6 +311,7 @@ class CameraStreamManager:
         stream = CameraFactory.create_camera(camera_type, connection_string, camera_code)
         worker = _CameraWorker(
             camera_id, stream,
+            camera_code=camera_code,
             is_attendance_cam=is_attendance_cam,
             is_activity_cam=is_activity_cam,
             zone_config=zone_config,
