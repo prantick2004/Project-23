@@ -7,10 +7,12 @@ from datetime import date
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.base_repository import BaseRepository
 from app.infrastructure.database.models.attendance import AttendanceRecord
+from app.infrastructure.database.models.employee import Employee
 
 
 class AttendanceRepository(BaseRepository[AttendanceRecord]):
@@ -57,3 +59,33 @@ class AttendanceRepository(BaseRepository[AttendanceRecord]):
             .offset(skip).limit(limit)
         )
         return result.scalars().all()
+
+    async def list_by_date_range(
+        self,
+        date_from: date,
+        date_to: date,
+        department_id: Optional[UUID] = None,
+        employee_id: Optional[UUID] = None,
+    ) -> List[AttendanceRecord]:
+        """
+        Report query — all attendance rows in [date_from, date_to], with
+        employee (+ department) eagerly loaded to avoid N+1 during export.
+        No pagination — reports need the full range.
+        """
+        query = (
+            select(AttendanceRecord)
+            .join(Employee, AttendanceRecord.employee_id == Employee.id)
+            .options(joinedload(AttendanceRecord.employee).joinedload(Employee.department))
+            .where(
+                AttendanceRecord.work_date >= date_from,
+                AttendanceRecord.work_date <= date_to,
+            )
+        )
+        if department_id is not None:
+            query = query.where(Employee.department_id == department_id)
+        if employee_id is not None:
+            query = query.where(AttendanceRecord.employee_id == employee_id)
+
+        query = query.order_by(AttendanceRecord.work_date.asc())
+        result = await self.db.execute(query)
+        return list(result.unique().scalars().all())

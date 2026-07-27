@@ -6,10 +6,12 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from sqlalchemy import select, and_
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.base_repository import BaseRepository
 from app.infrastructure.database.models.activity import ActivityLog
+from app.infrastructure.database.models.employee import Employee
 from app.core.constants import ActivityType
 
 
@@ -85,3 +87,35 @@ class ActivityRepository(BaseRepository[ActivityLog]):
             .group_by(ActivityLog.activity_type)
         )
         return [{"activity_type": row[0], "count": row[1]} for row in result.all()]
+
+    async def list_by_date_range(
+        self,
+        date_from: datetime,
+        date_to: datetime,
+        activity_type: Optional[ActivityType] = None,
+        employee_id: Optional[uuid.UUID] = None,
+        camera_id: Optional[uuid.UUID] = None,
+    ) -> List[ActivityLog]:
+        """
+        Report query — all activity logs in [date_from, date_to] (inclusive),
+        employee eagerly loaded. No pagination — reports need full range.
+        """
+        conditions = [
+            ActivityLog.detected_at >= date_from,
+            ActivityLog.detected_at <= date_to,
+        ]
+        if activity_type is not None:
+            conditions.append(ActivityLog.activity_type == activity_type)
+        if employee_id is not None:
+            conditions.append(ActivityLog.employee_id == employee_id)
+        if camera_id is not None:
+            conditions.append(ActivityLog.camera_id == camera_id)
+
+        query = (
+            select(ActivityLog)
+            .options(joinedload(ActivityLog.employee))
+            .where(and_(*conditions))
+            .order_by(ActivityLog.detected_at.asc())
+        )
+        result = await self.db.execute(query)
+        return list(result.unique().scalars().all())
