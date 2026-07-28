@@ -56,8 +56,35 @@ async def _process_attendance_async(camera_id: str, employee_id: str, confidence
                     check_out=str(result.check_out_time),
                     status=str(result.status),
                 )
+                from app.api.websockets.attendance_stream import attendance_broadcaster
+                await attendance_broadcaster.broadcast({
+                    "type": "attendance_update",
+                    "payload": {
+                        "employee_id": employee_id,
+                        "camera_id": camera_id,
+                        "check_in_time": result.check_in_time.isoformat() if result.check_in_time else None,
+                        "check_out_time": result.check_out_time.isoformat() if result.check_out_time else None,
+                        "status": result.status.value if hasattr(result.status, "value") else str(result.status),
+                    },
+                })
         except Exception as e:
             logger.error("attendance_processing_failed", employee_id=employee_id, error=str(e))
+
+
+async def _process_heartbeat_async(camera_id: str, heartbeat) -> None:
+    """
+    Runs on the MAIN event loop (scheduled via run_coroutine_threadsafe).
+    Persists last_heartbeat to DB — throttled, not called every frame.
+    """
+    from app.infrastructure.database.connection import AsyncSessionFactory
+    from app.repositories.camera_repository import CameraRepository
+
+    async with AsyncSessionFactory() as session:
+        try:
+            repo = CameraRepository(session)
+            await repo.update_heartbeat(camera_id, heartbeat)
+        except Exception as e:
+            logger.error("heartbeat_persist_failed", camera_id=camera_id, error=str(e))
 
 
 async def _process_activity_async(
@@ -164,6 +191,7 @@ class _CameraWorker:
         self.latest_activities: list = []
         self._read_count: int = 0
         self._recognition_every_n_reads: int = 10  # ~3x/sec at 30 reads/sec loop
+        self._heartbeat_every_n_reads: int = 150  # ~1x/5sec at 30 reads/sec loop
 
     def start(self) -> bool:
         if not self.stream.connect():
@@ -188,6 +216,8 @@ class _CameraWorker:
                     self._run_recognition(frame)
                     if self.is_activity_cam:
                         self._run_activity_detection(frame)
+                if self._read_count % self._heartbeat_every_n_reads == 0:
+                    self._dispatch_heartbeat()
             time.sleep(0.03)  # ~30 reads/sec cap; actual FPS limited by camera
 
     def get_latest_frame(self) -> Optional[np.ndarray]:
@@ -228,6 +258,16 @@ class _CameraWorker:
             return
         asyncio.run_coroutine_threadsafe(
             _process_attendance_async(self.camera_id, employee_id, confidence),
+            loop,
+        )
+
+    def _dispatch_heartbeat(self) -> None:
+        """Schedule a throttled DB heartbeat update on the main event loop."""
+        loop = get_main_loop()
+        if loop is None:
+            return
+        asyncio.run_coroutine_threadsafe(
+            _process_heartbeat_async(self.camera_id, self.last_heartbeat),
             loop,
         )
 
