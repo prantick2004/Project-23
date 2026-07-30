@@ -29,6 +29,10 @@ from app.infrastructure.camera.stream_manager import stream_manager
 from app.infrastructure.camera.main_loop import set_main_loop
 from app.infrastructure.database.connection import AsyncSessionFactory
 from app.services.face_encoding_service import FaceEncodingService
+from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 setup_logging()
 logger   = get_logger(__name__)
@@ -42,6 +46,12 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Rate limiting (slowapi) — default limit applied via decorator per-route if needed;
+# global default here protects every route at 100 requests/minute per client IP.
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -50,6 +60,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Prometheus metrics — exposes GET /metrics
+Instrumentator().instrument(app).expose(app)
 
 # Serve media files
 os.makedirs("media", exist_ok=True)
