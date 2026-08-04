@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db, get_current_active_user
+from app.api.dependencies import get_db, require_operator
 from app.schemas.report import (
     AttendanceReportRequest, ActivityReportRequest, IncidentReportRequest,
     ReportJobResponse, ReportJobStatusResponse,
@@ -30,7 +30,7 @@ _FMT_MAP = {"pdf": "pdf", "excel": "excel", "csv": "csv"}
 @router.post("/attendance", response_model=ReportJobResponse, status_code=status.HTTP_202_ACCEPTED)
 async def enqueue_attendance_report(
     data: AttendanceReportRequest,
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     task = generate_attendance_report_task.delay(
         date_from=data.date_from.isoformat(),
@@ -45,7 +45,7 @@ async def enqueue_attendance_report(
 @router.post("/activity", response_model=ReportJobResponse, status_code=status.HTTP_202_ACCEPTED)
 async def enqueue_activity_report(
     data: ActivityReportRequest,
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     task = generate_activity_report_task.delay(
         date_from=data.date_from.isoformat(),
@@ -61,7 +61,7 @@ async def enqueue_activity_report(
 @router.post("/incidents", response_model=ReportJobResponse, status_code=status.HTTP_202_ACCEPTED)
 async def enqueue_incident_report(
     data: IncidentReportRequest,
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     task = generate_incident_report_task.delay(
         date_from=data.date_from.isoformat(),
@@ -74,7 +74,7 @@ async def enqueue_incident_report(
 @router.get("/jobs/{job_id}", response_model=ReportJobStatusResponse)
 async def get_report_job_status(
     job_id: str,
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     """Poll Celery task state. status: queued|started|success|failure."""
     result = celery_app.AsyncResult(job_id)
@@ -95,7 +95,7 @@ async def get_report_job_status(
 @router.get("/download/{filename}")
 async def download_report(
     filename: str,
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     """Serve a previously generated report file."""
     safe_name = Path(filename).name

@@ -6,21 +6,16 @@ as attendance in Phase 6.
 """
 from uuid import UUID
 from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.api.dependencies import get_db, get_current_active_user
+from app.api.dependencies import get_db, require_operator
 from app.services.activity_service import ActivityService
 from app.core.constants import ActivityType
 from app.schemas.activity import (
     ActivityResponse, ActivityListResponse,
     ActivityResolveResponse, ActivityStatsResponse,
 )
-
 router = APIRouter(prefix="/activities", tags=["Activities"])
-
-
 @router.get("/", response_model=ActivityListResponse)
 async def list_activities(
     skip: int = Query(0, ge=0),
@@ -30,7 +25,7 @@ async def list_activities(
     activity_type: Optional[ActivityType] = Query(None),
     is_resolved: Optional[bool] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     service = ActivityService(db)
     activities = await service.list_activities(
@@ -42,36 +37,30 @@ async def list_activities(
         is_resolved=is_resolved,
     )
     return ActivityListResponse(total=len(activities), activities=activities)
-
-
 @router.get("/stats/by-type", response_model=ActivityStatsResponse)
 async def get_stats_by_type(
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     service = ActivityService(db)
     stats = await service.stats_by_type()
     return ActivityStatsResponse(stats=stats)
-
-
 @router.get("/{activity_id}", response_model=ActivityResponse)
 async def get_activity(
     activity_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     try:
         service = ActivityService(db)
         return await service.get_activity(str(activity_id))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-
-
 @router.put("/{activity_id}/resolve", response_model=ActivityResolveResponse)
 async def resolve_activity(
     activity_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     try:
         service = ActivityService(db)

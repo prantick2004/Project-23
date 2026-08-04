@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db, get_current_active_user
+from app.api.dependencies import get_db, require_admin, require_operator
 from app.services.camera_service import CameraService
 from app.infrastructure.camera.stream_manager import stream_manager
 from app.schemas.camera import (
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/cameras", tags=["Cameras"])
 async def create_camera(
     payload: CameraCreate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_admin),
 ):
     try:
         service = CameraService(db)
@@ -38,7 +38,7 @@ async def list_cameras(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     service = CameraService(db)
     cameras = await service.get_all_cameras(skip=skip, limit=limit)
@@ -49,7 +49,7 @@ async def list_cameras(
 async def get_camera(
     camera_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     try:
         service = CameraService(db)
@@ -63,7 +63,7 @@ async def update_camera(
     camera_id: UUID,
     payload: CameraUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_admin),
 ):
     try:
         service = CameraService(db)
@@ -76,7 +76,7 @@ async def update_camera(
 async def delete_camera(
     camera_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_admin),
 ):
     try:
         service = CameraService(db)
@@ -89,7 +89,7 @@ async def delete_camera(
 async def start_camera_stream(
     camera_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_admin),
 ):
     try:
         service = CameraService(db)
@@ -102,7 +102,7 @@ async def start_camera_stream(
 async def stop_camera_stream(
     camera_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_admin),
 ):
     try:
         service = CameraService(db)
@@ -115,7 +115,7 @@ async def stop_camera_stream(
 async def get_camera_status(
     camera_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     try:
         service = CameraService(db)
@@ -128,7 +128,7 @@ async def get_camera_status(
 async def get_camera_snapshot(
     camera_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     """Returns a single current JPEG frame from the running camera stream."""
     service = CameraService(db)
@@ -150,7 +150,7 @@ async def get_camera_snapshot(
 @router.get("/{camera_id}/recognitions")
 async def get_camera_recognitions(
     camera_id: UUID,
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     """
     Returns the most recent face recognition results for this camera
@@ -168,7 +168,7 @@ async def get_camera_recognitions(
 @router.get("/{camera_id}/activities")
 async def get_camera_activities(
     camera_id: UUID,
-    current_user=Depends(get_current_active_user),
+    current_user=Depends(require_operator),
 ):
     """
     Returns the most recent raw activity-detection results for this camera

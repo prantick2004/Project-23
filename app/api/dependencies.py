@@ -61,3 +61,26 @@ async def get_current_active_user(current_user=Depends(get_current_user)):
             detail="Inactive user"
         )
     return current_user
+
+
+def require_roles(*allowed_roles):
+    """
+    Factory — returns a dependency that only allows users with one of the given roles.
+    Usage: Depends(require_roles(UserRole.ADMIN))
+    """
+    async def role_checker(current_user=Depends(get_current_active_user)):
+        if current_user.role not in [r.value for r in allowed_roles]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Required role: {[r.value for r in allowed_roles]}",
+            )
+        return current_user
+    return role_checker
+
+
+from app.core.constants import UserRole
+
+# Pre-built role dependencies — import these directly into routers
+require_admin    = require_roles(UserRole.ADMIN)
+require_operator = require_roles(UserRole.ADMIN, UserRole.OPERATOR)
+require_viewer   = require_roles(UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER)
