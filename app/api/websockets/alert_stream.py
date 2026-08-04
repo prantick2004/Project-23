@@ -1,13 +1,16 @@
 """
-Alert WebSocket — ws://host/ws/alerts
+Alert WebSocket — ws://host/ws/alerts?token=<jwt>
 Global broadcast channel (not camera-scoped) — any connected dashboard
 client receives every new alert as JSON. Separate registry from
 connection_manager.py, which is keyed by camera_id for video streaming.
+Requires a valid JWT passed as ?token=... query param (Phase 11).
 """
 from typing import Set
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import structlog
+
+from app.api.dependencies import get_ws_user
 
 logger = structlog.get_logger(__name__)
 
@@ -47,6 +50,10 @@ alert_broadcaster = AlertBroadcaster()
 
 @router.websocket("/ws/alerts")
 async def alert_ws_endpoint(websocket: WebSocket):
+    user = await get_ws_user(websocket)
+    if user is None:
+        return  # socket already closed by get_ws_user with 1008
+
     await alert_broadcaster.connect(websocket)
     try:
         while True:

@@ -84,3 +84,37 @@ from app.core.constants import UserRole
 require_admin    = require_roles(UserRole.ADMIN)
 require_operator = require_roles(UserRole.ADMIN, UserRole.OPERATOR)
 require_viewer   = require_roles(UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER)
+
+
+async def get_ws_user(websocket):
+    """
+    Validate JWT passed as ?token=... query param on a WebSocket connection.
+    Returns the User on success, or None (after closing the socket) on failure.
+    Used by ws/alerts and ws/attendance — no HTTPBearer available on WS handshake.
+    """
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008, reason="Missing token")
+        return None
+
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            await websocket.close(code=1008, reason="Invalid token")
+            return None
+    except JWTError:
+        await websocket.close(code=1008, reason="Invalid or expired token")
+        return None
+
+    from sqlalchemy import select
+    from app.infrastructure.database.models.user import UserModel
+    async with AsyncSessionFactory() as db:
+        result = await db.execute(select(UserModel).where(UserModel.id == user_id))
+        user = result.scalar_one_or_none()
+
+    if user is None or not user.is_active:
+        await websocket.close(code=1008, reason="User not found or inactive")
+        return None
+
+    return user
