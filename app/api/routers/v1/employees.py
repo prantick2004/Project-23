@@ -3,6 +3,7 @@ Employee Router — async API endpoints for employee management.
 """
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db, require_admin, require_operator
@@ -138,3 +139,20 @@ async def encode_employee_face(
         return await service.encode_employee(str(employee_id))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/{employee_id}/photo")
+async def get_employee_photo(
+    employee_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_operator),
+):
+    """Serve employee photo file. Operator or admin only."""
+    try:
+        service = EmployeeService(db)
+        employee = await service.get_employee(str(employee_id))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    if not employee.photo_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No photo uploaded for this employee")
+    return FileResponse(employee.photo_path, media_type="image/jpeg")

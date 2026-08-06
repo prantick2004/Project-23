@@ -1,9 +1,18 @@
+import os
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 from app.infrastructure.database.base import Base
 
 config = context.config
+
+# Prefer DATABASE_URL from environment (Docker Compose / .env) over
+# the hardcoded value in alembic.ini. Alembic needs a SYNC driver,
+# so convert asyncpg -> psycopg2 if the app's async URL is set.
+_env_url = os.environ.get("DATABASE_URL")
+if _env_url:
+    _sync_url = _env_url.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+    config.set_main_option("sqlalchemy.url", _sync_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 

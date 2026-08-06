@@ -5,7 +5,6 @@ FastAPI application entry point for Project-23.
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 import os
 
 from app.core.config import get_settings
@@ -64,9 +63,10 @@ app.add_middleware(
 # Prometheus metrics — exposes GET /metrics
 Instrumentator().instrument(app).expose(app)
 
-# Serve media files
+# Media directory still created for local_storage.py writes —
+# no longer mounted as public static route (RBAC bypass fix, Phase 12).
+# Access is now only via GET /employees/{id}/photo and evidence endpoints.
 os.makedirs("media", exist_ok=True)
-app.mount("/media", StaticFiles(directory="media"), name="media")
 
 # Routers
 app.include_router(auth_router,       prefix=AppConstants.API_V1_PREFIX)

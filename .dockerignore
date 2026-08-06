@@ -1,0 +1,40 @@
+# Version control
+.git
+.gitignore
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Runtime data (mounted as volumes, not baked into image)
+storage/
+models/
+logs/
+
+# Tests / dev
+tests/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.md
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Docker itself
+Dockerfile
+Dockerfile.worker
+docker-compose.yml
+docker/
+!docker/entrypoint.sh
