@@ -190,21 +190,27 @@ class _CameraWorker:
         self.latest_recognitions: list = []
         self.latest_activities: list = []
         self._read_count: int = 0
-        self._recognition_every_n_reads: int = 10  # ~3x/sec at 30 reads/sec loop
+        self._recognition_every_n_reads: int = 10  # kept for reference, no longer used to gate inference
         self._heartbeat_every_n_reads: int = 150  # ~1x/5sec at 30 reads/sec loop
+        self._inference_interval_seconds: float = 0.33  # ~3x/sec, runs on its own thread now
+        self._inference_thread: Optional[threading.Thread] = None
 
     def start(self) -> bool:
         if not self.stream.connect():
             logger.error("camera_connect_failed", camera_id=self.camera_id)
             return False
         self.is_running = True
-        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
+        self._inference_thread = threading.Thread(target=self._inference_loop, daemon=True)
+        self._inference_thread.start()
         logger.info("camera_thread_started", camera_id=self.camera_id)
         return True
 
-    def _run(self) -> None:
-        """Loop: read frame -> cache it -> repeat. Runs in background thread."""
+    def _capture_loop(self) -> None:
+        """Loop: read frame -> cache it -> repeat. Runs in background thread.
+        Never blocked by AI inference anymore -- that runs on a separate
+        thread (_inference_loop) so the live stream stays smooth."""
         while self.is_running:
             frame = self.stream.read_frame()
             if frame is not None:
@@ -212,13 +218,21 @@ class _CameraWorker:
                     self.latest_frame = frame
                     self.last_heartbeat = datetime.now(timezone.utc)
                 self._read_count += 1
-                if self._read_count % self._recognition_every_n_reads == 0:
-                    self._run_recognition(frame)
-                    if self.is_activity_cam:
-                        self._run_activity_detection(frame)
                 if self._read_count % self._heartbeat_every_n_reads == 0:
                     self._dispatch_heartbeat()
             time.sleep(0.03)  # ~30 reads/sec cap; actual FPS limited by camera
+
+    def _inference_loop(self) -> None:
+        """Runs face recognition + activity detection on a snapshot of the
+        latest frame, on its own thread, so slow CPU inference never blocks
+        frame capture or the live WebSocket stream."""
+        while self.is_running:
+            frame = self.get_latest_frame()
+            if frame is not None:
+                self._run_recognition(frame)
+                if self.is_activity_cam:
+                    self._run_activity_detection(frame)
+            time.sleep(self._inference_interval_seconds)
 
     def get_latest_frame(self) -> Optional[np.ndarray]:
         with self._lock:
@@ -321,6 +335,8 @@ class _CameraWorker:
         self.is_running = False
         if self._thread:
             self._thread.join(timeout=2)
+        if self._inference_thread:
+            self._inference_thread.join(timeout=2)
         self.stream.release()
         logger.info("camera_thread_stopped", camera_id=self.camera_id)
 

@@ -43,6 +43,12 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://project23_user:project23_pass@postgres:5432/project23_db
       REDIS_URL: redis://redis:6379/0
+    devices:
+      # Dev-only: passes host webcam through for local demo/testing.
+      # Remove for real server deployment (no physical camera there).
+      - "/dev/video0:/dev/video0"
+    group_add:
+      - "44"  # host's video group GID, lets appuser (non-root) open /dev/video0
     env_file:
       - .env
     depends_on:
