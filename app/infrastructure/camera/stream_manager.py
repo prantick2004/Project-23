@@ -192,8 +192,10 @@ class _CameraWorker:
         self._read_count: int = 0
         self._recognition_every_n_reads: int = 10  # kept for reference, no longer used to gate inference
         self._heartbeat_every_n_reads: int = 150  # ~1x/5sec at 30 reads/sec loop
-        self._inference_interval_seconds: float = 0.33  # ~3x/sec, runs on its own thread now
-        self._inference_thread: Optional[threading.Thread] = None
+        self._recognition_interval_seconds: float = 0.33  # ~3x/sec
+        self._activity_interval_seconds: float = 0.33  # ~3x/sec, independent of recognition
+        self._recognition_thread: Optional[threading.Thread] = None
+        self._activity_thread: Optional[threading.Thread] = None
 
     def start(self) -> bool:
         if not self.stream.connect():
@@ -202,8 +204,10 @@ class _CameraWorker:
         self.is_running = True
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
-        self._inference_thread = threading.Thread(target=self._inference_loop, daemon=True)
-        self._inference_thread.start()
+        self._recognition_thread = threading.Thread(target=self._recognition_loop, daemon=True)
+        self._recognition_thread.start()
+        self._activity_thread = threading.Thread(target=self._activity_loop, daemon=True)
+        self._activity_thread.start()
         logger.info("camera_thread_started", camera_id=self.camera_id)
         return True
 
@@ -222,17 +226,25 @@ class _CameraWorker:
                     self._dispatch_heartbeat()
             time.sleep(0.03)  # ~30 reads/sec cap; actual FPS limited by camera
 
-    def _inference_loop(self) -> None:
-        """Runs face recognition + activity detection on a snapshot of the
-        latest frame, on its own thread, so slow CPU inference never blocks
-        frame capture or the live WebSocket stream."""
+    def _recognition_loop(self) -> None:
+        """Runs face recognition on its own thread/timer, independent of
+        activity detection -- so a slow YOLO pass never delays face
+        recognition, and vice versa."""
         while self.is_running:
             frame = self.get_latest_frame()
             if frame is not None:
                 self._run_recognition(frame)
-                if self.is_activity_cam:
+            time.sleep(self._recognition_interval_seconds)
+
+    def _activity_loop(self) -> None:
+        """Runs activity detection (phone/posture/eyes/zone) on its own
+        thread/timer, independent of face recognition."""
+        while self.is_running:
+            if self.is_activity_cam:
+                frame = self.get_latest_frame()
+                if frame is not None:
                     self._run_activity_detection(frame)
-            time.sleep(self._inference_interval_seconds)
+            time.sleep(self._activity_interval_seconds)
 
     def get_latest_frame(self) -> Optional[np.ndarray]:
         with self._lock:
@@ -288,10 +300,12 @@ class _CameraWorker:
     def _run_activity_detection(self, frame: np.ndarray) -> None:
         """Run YOLO-based activity detection on one frame. Runs inside camera thread."""
         try:
+            face_boxes = [r["box"] for r in self.get_latest_recognitions()]
             events = activity_analyzer.analyze_frame(
                 camera_id=self.camera_id,
                 frame_bgr=frame,
                 zone_config=self.zone_config,
+                face_boxes=face_boxes,
             )
             with self._lock:
                 self.latest_activities = events
@@ -335,8 +349,10 @@ class _CameraWorker:
         self.is_running = False
         if self._thread:
             self._thread.join(timeout=2)
-        if self._inference_thread:
-            self._inference_thread.join(timeout=2)
+        if self._recognition_thread:
+            self._recognition_thread.join(timeout=2)
+        if self._activity_thread:
+            self._activity_thread.join(timeout=2)
         self.stream.release()
         logger.info("camera_thread_stopped", camera_id=self.camera_id)
 

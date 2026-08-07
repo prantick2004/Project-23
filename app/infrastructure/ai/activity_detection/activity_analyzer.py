@@ -12,6 +12,7 @@ import structlog
 from app.infrastructure.ai.activity_detection.phone_detector import phone_detector
 from app.infrastructure.ai.activity_detection.posture_analyzer import posture_analyzer
 from app.infrastructure.ai.activity_detection.zone_monitor import zone_monitor
+from app.infrastructure.ai.activity_detection.eye_tracker import eye_tracker
 from app.core.constants import ActivityType
 
 logger = structlog.get_logger(__name__)
@@ -25,6 +26,7 @@ class ActivityAnalyzer:
         camera_id: str,
         frame_bgr: np.ndarray,
         zone_config: Optional[dict] = None,
+        face_boxes: Optional[list] = None,
     ) -> List[Dict]:
         """
         Returns a list of raw event dicts, each:
@@ -52,19 +54,44 @@ class ActivityAnalyzer:
         except Exception as e:
             logger.error("phone_detection_error", camera_id=camera_id, error=str(e))
 
-        # --- Sleeping / inactivity ---
+        # --- Sleeping / inactivity (eye closure is the primary signal,
+        # posture is a secondary corroborating signal) ---
         try:
             posture = posture_analyzer.analyze(camera_id, frame_bgr)
+            eye_result = None
+            if face_boxes:
+                # Use the first detected face for eye tracking -- same box
+                # format (top, right, bottom, left) already produced by
+                # face_detector during recognition, no re-detection needed.
+                eye_result = eye_tracker.analyze(camera_id, frame_bgr, face_boxes[0])
+
             if posture["person_box"] is not None:
                 x1, y1, x2, y2 = posture["person_box"]
                 box_dict = {"x": x1, "y": y1, "w": x2 - x1, "h": y2 - y1}
 
-                if posture["is_sleeping"]:
+                eyes_sustained_closed = eye_result is not None and eye_result["sustained_closed"]
+
+                if eyes_sustained_closed:
+                    # Strong signal: eyes closed for 2+ seconds.
+                    # Higher confidence if posture also suggests lying down.
+                    confidence = 0.9 if posture["is_sleeping"] else 0.75
                     events.append({
                         "activity_type": ActivityType.SLEEPING,
-                        "confidence_score": 0.6,  # heuristic-based, fixed moderate confidence
+                        "confidence_score": confidence,
                         "bounding_box": box_dict,
-                        "description": "Person posture suggests lying down / sleeping",
+                        "description": (
+                            f"Eyes closed for {eye_result['closed_duration_seconds']}s"
+                            + (" and posture suggests lying down" if posture["is_sleeping"] else "")
+                        ),
+                    })
+                elif posture["is_sleeping"]:
+                    # Posture-only fallback (e.g. no face visible to check eyes) --
+                    # kept as a weaker signal, same as before.
+                    events.append({
+                        "activity_type": ActivityType.SLEEPING,
+                        "confidence_score": 0.5,
+                        "bounding_box": box_dict,
+                        "description": "Person posture suggests lying down / sleeping (no eye data)",
                     })
 
                 if posture["is_inactive"]:
