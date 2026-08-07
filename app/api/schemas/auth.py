@@ -5,6 +5,7 @@ Pydantic schemas for authentication endpoints.
 """
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from uuid import UUID
 from app.core.constants import UserRole
 
 
@@ -29,7 +30,7 @@ class RefreshRequest(BaseModel):
 
 class UserResponse(BaseModel):
     """Response for GET /auth/me"""
-    id: str
+    id: UUID
     username: str
     full_name: Optional[str]
     email: str

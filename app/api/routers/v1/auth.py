@@ -19,6 +19,8 @@ from app.api.schemas.auth import (
     RefreshRequest, UserResponse
 )
 from app.api.dependencies import get_current_active_user
+from app.core.token_blocklist import block_token, is_token_blocked
+from datetime import datetime
 
 router   = APIRouter(prefix="/auth", tags=["Authentication"])
 settings = get_settings()
@@ -67,10 +69,22 @@ async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
             detail="Invalid refresh token"
         )
 
-    result = await db.execute(
-        select(UserModel).where(UserModel.id == payload["sub"])
-    )
-    user = result.scalar_one_or_none()
+    if await is_token_blocked(payload.get("jti", "")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked"
+        )
+
+    try:
+        result = await db.execute(
+            select(UserModel).where(UserModel.id == payload["sub"])
+        )
+        user = result.scalar_one_or_none()
+    except (ValueError, Exception):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token"
+        )
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -89,3 +103,26 @@ async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
 def get_me(current_user=Depends(get_current_active_user)):
     """Get current logged in user info."""
     return current_user
+
+
+@router.post("/logout")
+async def logout(request: RefreshRequest):
+    """
+    Invalidate a refresh token immediately, before its natural expiry.
+    Client should discard both tokens locally regardless -- this only
+    prevents the refresh token from being used again server-side.
+    """
+    try:
+        payload = decode_token(request.refresh_token)
+    except ValueError:
+        # Already invalid/expired -- nothing to revoke, treat as success
+        # since the end state (token unusable) is what the caller wants.
+        return {"message": "Logged out"}
+
+    jti = payload.get("jti", "")
+    exp = payload.get("exp")
+    if jti and exp:
+        remaining_seconds = int(exp - datetime.utcnow().timestamp())
+        await block_token(jti, remaining_seconds)
+
+    return {"message": "Logged out"}

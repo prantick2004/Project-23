@@ -8,6 +8,7 @@ from jose import JWTError, jwt
 
 from app.infrastructure.database.connection import AsyncSessionFactory
 from app.core.config import get_settings
+from app.core.token_blocklist import is_token_blocked
 
 bearer_scheme = HTTPBearer()
 settings      = get_settings()
@@ -42,6 +43,9 @@ async def get_current_user(
         if user_id is None:
             raise credentials_exception
     except JWTError:
+        raise credentials_exception
+
+    if await is_token_blocked(payload.get("jti", "")):
         raise credentials_exception
 
     from sqlalchemy import select
@@ -105,6 +109,10 @@ async def get_ws_user(websocket):
             return None
     except JWTError:
         await websocket.close(code=1008, reason="Invalid or expired token")
+        return None
+
+    if await is_token_blocked(payload.get("jti", "")):
+        await websocket.close(code=1008, reason="Token has been revoked")
         return None
 
     from sqlalchemy import select

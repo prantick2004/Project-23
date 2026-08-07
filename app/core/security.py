@@ -3,6 +3,7 @@ app/core/security.py
 --------------------
 JWT token creation and password hashing for Project-23.
 """
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -31,7 +32,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     expire = datetime.utcnow() + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
-    to_encode.update({"exp": expire, "type": "access"})
+    to_encode.update({"exp": expire, "type": "access", "jti": str(uuid.uuid4())})
     return jwt.encode(to_encode, settings.secret_key, algorithm="HS256")
 
 
@@ -39,7 +40,7 @@ def create_refresh_token(data: dict) -> str:
     """Create a JWT refresh token."""
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=settings.refresh_token_expire_days)
-    to_encode.update({"exp": expire, "type": "refresh"})
+    to_encode.update({"exp": expire, "type": "refresh", "jti": str(uuid.uuid4())})
     return jwt.encode(to_encode, settings.secret_key, algorithm="HS256")
 
 
