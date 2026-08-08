@@ -41,7 +41,7 @@ services:
     restart: unless-stopped
     # app-env-override: force container-network hostnames
     environment:
-      DATABASE_URL: postgresql+asyncpg://project23_user:project23_pass@postgres:5432/project23_db
+      DATABASE_URL: postgresql+asyncpg://project23_user:${POSTGRES_PASSWORD}@postgres:5432/project23_db
       REDIS_URL: redis://redis:6379/0
     devices:
       # Dev-only: passes host webcam through for local demo/testing.
@@ -72,7 +72,7 @@ services:
     restart: unless-stopped
     # worker-env-override: force container-network hostnames
     environment:
-      DATABASE_URL: postgresql+asyncpg://project23_user:project23_pass@postgres:5432/project23_db
+      DATABASE_URL: postgresql+asyncpg://project23_user:${POSTGRES_PASSWORD}@postgres:5432/project23_db
       REDIS_URL: redis://redis:6379/0
     env_file:
       - .env
@@ -96,7 +96,7 @@ services:
     restart: unless-stopped
     # beat-env-override: force container-network hostnames
     environment:
-      DATABASE_URL: postgresql+asyncpg://project23_user:project23_pass@postgres:5432/project23_db
+      DATABASE_URL: postgresql+asyncpg://project23_user:${POSTGRES_PASSWORD}@postgres:5432/project23_db
       REDIS_URL: redis://redis:6379/0
     command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info"]
     env_file:
