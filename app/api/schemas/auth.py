@@ -28,6 +28,12 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class LogoutRequest(BaseModel):
+    """Request body for POST /auth/logout"""
+    refresh_token: str
+    access_token: Optional[str] = None
+
+
 class UserResponse(BaseModel):
     """Response for GET /auth/me"""
     id: UUID

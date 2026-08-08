@@ -16,7 +16,7 @@ from app.core.security import (
 from app.core.config import get_settings
 from app.api.schemas.auth import (
     LoginRequest, TokenResponse,
-    RefreshRequest, UserResponse
+    RefreshRequest, UserResponse, LogoutRequest
 )
 from app.api.dependencies import get_current_active_user
 from app.core.token_blocklist import block_token, is_token_blocked
@@ -106,23 +106,29 @@ def get_me(current_user=Depends(get_current_active_user)):
 
 
 @router.post("/logout")
-async def logout(request: RefreshRequest):
+async def logout(request: LogoutRequest):
     """
-    Invalidate a refresh token immediately, before its natural expiry.
-    Client should discard both tokens locally regardless -- this only
-    prevents the refresh token from being used again server-side.
+    Invalidate the refresh token immediately, before its natural expiry.
+    If the caller also includes the current access token, that is
+    revoked too -- otherwise the access token stays valid until its own
+    (short, ~30 min) natural expiry even after logout, which is a real
+    gap for anyone who wants a logout to take effect immediately.
+    Client should discard both tokens locally regardless.
     """
-    try:
-        payload = decode_token(request.refresh_token)
-    except ValueError:
-        # Already invalid/expired -- nothing to revoke, treat as success
-        # since the end state (token unusable) is what the caller wants.
-        return {"message": "Logged out"}
+    async def _revoke(token: str) -> None:
+        if not token:
+            return
+        try:
+            payload = decode_token(token)
+        except ValueError:
+            return  # already invalid/expired -- nothing to revoke
+        jti = payload.get("jti", "")
+        exp = payload.get("exp")
+        if jti and exp:
+            remaining_seconds = int(exp - datetime.utcnow().timestamp())
+            await block_token(jti, remaining_seconds)
 
-    jti = payload.get("jti", "")
-    exp = payload.get("exp")
-    if jti and exp:
-        remaining_seconds = int(exp - datetime.utcnow().timestamp())
-        await block_token(jti, remaining_seconds)
+    await _revoke(request.refresh_token)
+    await _revoke(request.access_token)
 
     return {"message": "Logged out"}
