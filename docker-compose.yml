@@ -57,7 +57,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./storage:/app/storage
+      - ./media:/app/media
       - ./models:/app/models
       - ./logs:/app/logs
     networks:
@@ -82,7 +82,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./storage:/app/storage
+      - ./media:/app/media
       - ./models:/app/models
       - ./logs:/app/logs
     networks:
@@ -107,7 +107,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./storage:/app/storage
+      - ./media:/app/media
       - ./logs:/app/logs
     networks:
       - project23_net

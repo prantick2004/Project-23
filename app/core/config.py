@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # ─── Storage ─────────────────────────────────────────────────
-    storage_path: str = "./storage"
+    media_path: str = "./media"
     max_upload_size_mb: int = 10
 
     # ─── Face Recognition ────────────────────────────────────────

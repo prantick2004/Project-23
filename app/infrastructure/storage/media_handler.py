@@ -14,14 +14,16 @@ import cv2
 import numpy as np
 import structlog
 
+from app.core.config import get_settings
+
 logger = structlog.get_logger(__name__)
 
 
 class MediaHandler:
     """Saves activity-event screenshots under media/evidence/screenshots/."""
 
-    def __init__(self, base_path: str = "media") -> None:
-        self.base_path = Path(base_path)
+    def __init__(self, base_path: Optional[str] = None) -> None:
+        self.base_path = Path(base_path or get_settings().media_path)
         self.screenshots_dir = self.base_path / "evidence" / "screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 

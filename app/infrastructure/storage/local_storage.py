@@ -11,14 +11,16 @@ from typing import Optional
 from fastapi import UploadFile
 from PIL import Image, UnidentifiedImageError
 
+from app.core.config import get_settings
+
 MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 class LocalStorageService:
     """Manages local file storage for employee photos and evidence."""
 
-    def __init__(self, base_path: str = "media"):
-        self.base_path = Path(base_path)
+    def __init__(self, base_path: Optional[str] = None):
+        self.base_path = Path(base_path or get_settings().media_path)
         self._create_directories()
 
     def _create_directories(self) -> None:

@@ -54,7 +54,7 @@ COPY scripts/ ./scripts/
 COPY docker/entrypoint.sh /entrypoint.sh
 
 # Runtime dirs
-RUN mkdir -p storage/employees storage/evidence/screenshots storage/evidence/clips storage/reports models logs \
+RUN mkdir -p media/employees/photos media/employees/datasets media/evidence/screenshots media/evidence/clips media/reports models logs \
     && chown -R appuser:appuser /app \
     && chmod +x /entrypoint.sh
 

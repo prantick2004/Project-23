@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 .env
 media/
-/storage/
 models/
 logs/
 *.log
