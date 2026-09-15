@@ -161,7 +161,12 @@ curl http://localhost/health
 python -m venv venv
 source venv/bin/activate
 
-# Install dependencies
+# Install torch CPU-only FIRST (avoids pulling ~2GB of GPU/CUDA
+# packages on a laptop with no GPU — same approach Docker build uses)
+pip install torch==2.13.0 torchvision==0.28.0 \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining dependencies
 pip install -r requirements.txt
 
 # Start PostgreSQL and Redis (via Docker or locally)
