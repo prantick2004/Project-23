@@ -25,6 +25,11 @@ services:
     image: redis:7-alpine
     container_name: project23_redis
     restart: unless-stopped
+    ports:
+      # Dev-only: exposes Redis to host so local `uvicorn --reload` workflow
+      # (outside Docker) can reach it for token blocklist checks and
+      # submitting Celery tasks. Remove/override for real deployment.
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
