@@ -8,9 +8,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.employee_repository import EmployeeRepository
 from app.repositories.face_encoding_repository import FaceEncodingRepository
-from app.infrastructure.ai.face_recognition.face_detector import face_detector
+from app.infrastructure.ai.face_recognition.face_detector import face_detector, FaceDetector
 from app.infrastructure.ai.face_recognition.face_encoder import face_encoder_hq
 from app.infrastructure.ai.face_recognition.encoding_cache import encoding_cache
+
+# For one-off enrollment-photo encoding (this file), we can afford to try
+# much harder than the live camera loop's fast hog/upsample=1 settings.
+# Real-world testing against an actual laptop webcam selfie showed
+# upsample=1 and upsample=2 both missed a clearly-visible, well-lit,
+# in-focus face that upsample=3 (and the much slower CNN model) found
+# immediately -- so this is a real retry ladder, not a single guess.
+# The live camera loop (stream_manager.py) is unaffected; it still uses
+# the fast default `face_detector` instance for per-frame detection.
+_ENROLLMENT_UPSAMPLE_LADDER = [2, 3]
+_enrollment_detectors = [
+    FaceDetector(model="hog", upsample=n) for n in _ENROLLMENT_UPSAMPLE_LADDER
+]
 
 
 class FaceEncodingService:
@@ -39,6 +52,15 @@ class FaceEncodingService:
             raise ValueError(f"Could not read photo file at '{employee.photo_path}'")
 
         box = face_detector.detect_largest(img)
+        if box is None:
+            # Retry with increasing upsample factors before giving up --
+            # this is a one-off enrollment call, not the live per-frame
+            # loop, so the extra latency here is fine and worth the
+            # improved detection rate on smaller/off-center faces.
+            for detector in _enrollment_detectors:
+                box = detector.detect_largest(img)
+                if box is not None:
+                    break
         if box is None:
             raise ValueError("No face detected in employee's photo")
 
