@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head><title>Camera Live View</title></head>
+<body style="background:#111; text-align:center; font-family:sans-serif;">
+  <h3 style="color:#eee;">Live feed — CAM-LAPTOP-01</h3>
+  <img id="feed" style="max-width:90%; border:2px solid #555;" />
+  <p id="status" style="color:#0f0;">connecting...</p>
+  <script>
+    const camId = "50adb04f-481c-4295-85fd-fdaefd55a9f2";
+    const ws = new WebSocket(`ws://localhost:8000/ws/stream/${camId}`);
+    ws.binaryType = "arraybuffer";
+    const img = document.getElementById("feed");
+    const status = document.getElementById("status");
+    ws.onopen = () => status.textContent = "connected";
+    ws.onclose = () => status.textContent = "disconnected";
+    ws.onerror = () => status.textContent = "error";
+    ws.onmessage = (event) => {
+      const blob = new Blob([event.data], {type: "image/jpeg"});
+      const url = URL.createObjectURL(blob);
+      img.onload = () => URL.revokeObjectURL(url);
+      img.src = url;
+    };
+  </script>
+</body>
+</html>

@@ -45,7 +45,7 @@ ENV PYTHONPATH=/home/appuser/.local/lib/python3.11/site-packages:$PYTHONPATH
 
 COPY app/ ./app/
 
-RUN mkdir -p storage/employees storage/evidence/screenshots storage/evidence/clips storage/reports models logs \
+RUN mkdir -p media/employees/photos media/employees/datasets media/evidence/screenshots media/evidence/clips media/reports models logs \
     && chown -R appuser:appuser /app
 
 USER appuser
