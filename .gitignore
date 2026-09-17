@@ -16,3 +16,4 @@ alembic/versions/__pycache__/
 *.avi
 !docs/**/*.png
 live_view.html
+*.pdf
