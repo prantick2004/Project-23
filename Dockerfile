@@ -37,7 +37,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+# UID/GID 1000 matches the default first-user UID on Ubuntu/Debian hosts
+# (confirmed via `id -u` on the dev laptop). This makes the container's
+# appuser match the host user, so bind-mounted host directories (media/,
+# see docker-compose.yml) are actually writable instead of hitting
+# PermissionError -- host bind mounts always defer to host ownership,
+# regardless of any chown done later in this Dockerfile.
+RUN groupadd -g 1000 appuser && useradd -u 1000 -g appuser appuser
 
 WORKDIR /app
 
