@@ -2,7 +2,15 @@ import os
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
+from dotenv import load_dotenv
 from app.infrastructure.database.base import Base
+
+# Load .env so DATABASE_URL below actually picks up the real, current
+# password instead of silently falling back to the hardcoded (and now
+# stale) sqlalchemy.url in alembic.ini. Docker Compose sets this env var
+# automatically for containers, but a plain local `alembic upgrade head`
+# in a terminal does not -- this line is what makes that path work too.
+load_dotenv()
 
 config = context.config
 
