@@ -1,12 +1,9 @@
-import { PublicNavbar } from "@/components/navigation/PublicNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { mockReports } from "@/lib/mock-data/operations";
 import { FileBarChart } from "lucide-react";
 
 export default function PublicReportsPage() {
   return (
-    <main className="bg-midnight">
-      <PublicNavbar />
+    <main>
       <section className="bg-hero-gradient bg-grid-glow px-5 py-20 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
           <h1 className="text-4xl font-bold text-white sm:text-5xl">Reports &amp; Analytics</h1>
@@ -27,7 +24,6 @@ export default function PublicReportsPage() {
           ))}
         </div>
       </section>
-      <Footer />
     </main>
   );
 }

@@ -1,7 +1,5 @@
 "use client";
 import { useState } from "react";
-import { PublicNavbar } from "@/components/navigation/PublicNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/Button";
 import { CheckCircle2 } from "lucide-react";
 
@@ -33,8 +31,7 @@ export default function ContactPage() {
   }
 
   return (
-    <main className="bg-midnight">
-      <PublicNavbar />
+    <main>
       <section className="bg-hero-gradient bg-grid-glow px-5 py-20 lg:px-8">
         <div className="mx-auto max-w-xl text-center">
           <h1 className="text-4xl font-bold text-white sm:text-5xl">Contact Us</h1>
@@ -84,7 +81,6 @@ export default function ContactPage() {
           )}
         </div>
       </section>
-      <Footer />
     </main>
   );
 }

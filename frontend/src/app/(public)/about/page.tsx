@@ -1,11 +1,8 @@
-import { PublicNavbar } from "@/components/navigation/PublicNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { ShieldCheck, Target, Users } from "lucide-react";
 
 export default function AboutPage() {
   return (
-    <main className="bg-midnight">
-      <PublicNavbar />
+    <main>
       <section className="bg-hero-gradient bg-grid-glow px-5 py-20 lg:px-8">
         <div className="mx-auto max-w-4xl text-center">
           <h1 className="text-4xl font-bold text-white sm:text-5xl">About nit Solution</h1>
@@ -32,7 +29,6 @@ export default function AboutPage() {
           ))}
         </div>
       </section>
-      <Footer />
     </main>
   );
 }

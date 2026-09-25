@@ -27,7 +27,7 @@ const features = [
 
 export function PlatformOverview() {
   return (
-    <section className="bg-midnight px-5 py-24 lg:px-8">
+    <section className="bg-midnight/40 px-5 py-24 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold text-white sm:text-4xl">One Platform, Every Store</h2>
