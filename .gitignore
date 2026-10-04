@@ -17,3 +17,30 @@ alembic/versions/__pycache__/
 !docs/**/*.png
 live_view.html
 *.pdf
+
+# --- Secrets & credentials (never commit) ---
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
+secrets/
+docker/nginx/certs/*.key
+
+# --- Local databases / dumps ---
+*.sqlite
+*.sqlite3
+*.db
+*.sql.gz
+
+# --- Frontend build output & deps ---
+frontend/node_modules/
+frontend/dist/
+
+# --- Frontend assets that must be committed (root rules above ignore png/mp4) ---
+!frontend/src/assets/*.png
+!frontend/public/videos/*.mp4

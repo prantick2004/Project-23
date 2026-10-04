@@ -1,7 +1,9 @@
-node_modules/
-.next/
-out/
-.env*.local
-.DS_Store
-*.tsbuildinfo
-next-env.d.ts
+node_modules
+dist
+*.local
+.env
+.env.*
+!.env.example
+
+# Allow the (optional) auth background video even though the repo root ignores *.mp4
+!public/videos/*.mp4
