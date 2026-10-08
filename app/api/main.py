@@ -3,6 +3,7 @@ app/api/main.py
 ---------------
 FastAPI application entry point for Project-23.
 """
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -29,13 +30,36 @@ from app.infrastructure.camera.main_loop import set_main_loop
 from app.infrastructure.database.connection import AsyncSessionFactory
 from app.services.face_encoding_service import FaceEncodingService
 from prometheus_fastapi_instrumentator import Instrumentator
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from app.core.rate_limit import limiter
 
 setup_logging()
 logger   = get_logger(__name__)
 settings = get_settings()
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Startup: capture the event loop, load AI models, warm the face-encoding
+    cache. Shutdown: stop all camera threads cleanly. (Replaces the deprecated
+    @app.on_event hooks; behaviour is unchanged.)"""
+    import asyncio
+    set_main_loop(asyncio.get_running_loop())
+
+    from app.infrastructure.ai.model_registry import model_registry
+    model_registry.load()
+
+    async with AsyncSessionFactory() as session:
+        service = FaceEncodingService(session)
+        count = await service.refresh_cache_from_db()
+        logger.info("encoding_cache_ready", total_encodings=count)
+
+    try:
+        yield
+    finally:
+        stream_manager.stop_all()
+
 
 app = FastAPI(
     title=settings.app_name,
@@ -43,18 +67,22 @@ app = FastAPI(
     description="AI-Powered Smart Employee Monitoring and Attendance System",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
-# Rate limiting (slowapi) — default limit applied via decorator per-route if needed;
-# global default here protects every route at 100 requests/minute per client IP.
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+# Rate limiting (slowapi). The Limiter alone does nothing — SlowAPIMiddleware
+# is what actually enforces the 100/minute default on every route. Stricter
+# per-route limits (e.g. /auth/login) are applied with @limiter.limit(...).
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
-# CORS
+# CORS — explicit allow-list from config. A wildcard origin together with
+# allow_credentials=True is insecure (and rejected by browsers), so origins are
+# always an explicit list sourced from CORS_ALLOWED_ORIGINS.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -97,22 +125,3 @@ async def health():
     return {"status": "healthy"}
 
 
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Load AI models, warm the face-encoding cache from DB, capture main event loop."""
-    import asyncio
-    set_main_loop(asyncio.get_running_loop())
-
-    from app.infrastructure.ai.model_registry import model_registry
-    model_registry.load()
-
-    async with AsyncSessionFactory() as session:
-        service = FaceEncodingService(session)
-        count = await service.refresh_cache_from_db()
-        logger.info("encoding_cache_ready", total_encodings=count)
-
-
-@app.on_event("shutdown")
-async def shutdown_event() -> None:
-    """Stop all running camera threads cleanly when the server shuts down."""
-    stream_manager.stop_all()

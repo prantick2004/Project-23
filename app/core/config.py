@@ -30,13 +30,25 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
+    # Comma-separated list of browser origins allowed to make credentialed
+    # requests. "*" is intentionally NOT supported together with credentials.
+    cors_allowed_origins: str = "http://localhost:5173,http://localhost:4173"
+
     # ─── Database ────────────────────────────────────────────────
+    # NOTE: the actual connection uses `database_url` only. The fields below
+    # are informational; keep real credentials out of source — set them via
+    # DATABASE_URL / POSTGRES_PASSWORD in the environment (.env), never here.
     database_host: str = "localhost"
     database_port: int = 5432
     database_name: str = "project23_db"
     database_user: str = "project23_user"
-    database_password: str = "project23_pass"
+    database_password: str = ""
     database_url: str
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parsed, de-duplicated list of allowed CORS origins."""
+        return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
 
     # ─── Redis ───────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"
