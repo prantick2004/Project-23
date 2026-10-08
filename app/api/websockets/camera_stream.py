@@ -13,6 +13,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.infrastructure.camera.stream_manager import stream_manager
 from app.api.websockets.connection_manager import connection_manager
+from app.api.dependencies import get_ws_user
 
 logger = structlog.get_logger(__name__)
 
@@ -27,7 +28,13 @@ async def websocket_camera_stream(websocket: WebSocket, camera_id: str) -> None:
     Live JPEG-over-WebSocket stream for a single camera.
     Client must have already started the camera via POST /cameras/{id}/start.
     Sends raw JPEG bytes as binary WebSocket messages.
+    Requires a valid access token (?token=...), same as the other WS streams —
+    otherwise anyone could pull a live camera feed unauthenticated.
     """
+    user = await get_ws_user(websocket)
+    if user is None:
+        return  # socket already closed by get_ws_user with code 1008
+
     await connection_manager.connect(camera_id, websocket)
 
     try:

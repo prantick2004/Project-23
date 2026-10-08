@@ -3,38 +3,52 @@ app/api/routers/v1/auth.py
 --------------------------
 Authentication routes for Project-23.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.infrastructure.database.connection import get_db
 from app.infrastructure.database.models.user import UserModel
 from app.core.security import (
-    verify_password, create_access_token,
+    verify_password, hash_password, create_access_token,
     create_refresh_token, decode_token
 )
 from app.core.config import get_settings
+from app.core.rate_limit import limiter
 from app.api.schemas.auth import (
     LoginRequest, TokenResponse,
     RefreshRequest, UserResponse, LogoutRequest
 )
 from app.api.dependencies import get_current_active_user
 from app.core.token_blocklist import block_token, is_token_blocked
-from datetime import datetime
+from datetime import datetime, timezone
 
 router   = APIRouter(prefix="/auth", tags=["Authentication"])
 settings = get_settings()
 
+# Pre-computed dummy hash so a failed login runs bcrypt even when the username
+# doesn't exist — equalises response time and prevents username enumeration.
+_DUMMY_HASH = hash_password("dummy-password-for-timing-equalisation")
+
 
 @router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     """Login with username and password — returns JWT tokens."""
     result = await db.execute(
-        select(UserModel).where(UserModel.username == request.username)
+        select(UserModel).where(UserModel.username == payload.username)
     )
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(request.password, user.hashed_password):
+    # Always run a password verification (dummy when the user is absent) so the
+    # timing of a wrong-username vs wrong-password response is indistinguishable.
+    if user is None:
+        verify_password(payload.password, _DUMMY_HASH)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password"
+        )
+    if not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password"
@@ -57,10 +71,11 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("20/minute")
+async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     """Exchange refresh token for new access token."""
     try:
-        payload = decode_token(request.refresh_token)
+        payload = decode_token(body.refresh_token)
         if payload.get("type") != "refresh":
             raise ValueError("Not a refresh token")
     except ValueError:
@@ -75,16 +90,17 @@ async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
             detail="Token has been revoked"
         )
 
-    try:
-        result = await db.execute(
-            select(UserModel).where(UserModel.id == payload["sub"])
-        )
-        user = result.scalar_one_or_none()
-    except (ValueError, Exception):
+    # A malformed/missing "sub" is a bad token (401). A genuine database
+    # failure must NOT be masked as "invalid token" — let it surface as a 500
+    # so a valid user is never wrongly rejected during an outage.
+    sub = payload.get("sub")
+    if not sub:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token"
+            detail="Invalid refresh token",
         )
+    result = await db.execute(select(UserModel).where(UserModel.id == sub))
+    user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -125,7 +141,7 @@ async def logout(request: LogoutRequest):
         jti = payload.get("jti", "")
         exp = payload.get("exp")
         if jti and exp:
-            remaining_seconds = int(exp - datetime.utcnow().timestamp())
+            remaining_seconds = int(exp - datetime.now(timezone.utc).timestamp())
             await block_token(jti, remaining_seconds)
 
     await _revoke(request.refresh_token)

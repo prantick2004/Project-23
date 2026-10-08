@@ -42,6 +42,10 @@ async def get_current_user(
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
+        # Only an access token may authenticate API requests. A refresh token
+        # must be exchanged at /auth/refresh, never used as a bearer here.
+        if payload.get("type") != "access":
+            raise credentials_exception
     except JWTError:
         raise credentials_exception
 
@@ -106,6 +110,9 @@ async def get_ws_user(websocket):
         user_id: str = payload.get("sub")
         if user_id is None:
             await websocket.close(code=1008, reason="Invalid token")
+            return None
+        if payload.get("type") != "access":
+            await websocket.close(code=1008, reason="Invalid token type")
             return None
     except JWTError:
         await websocket.close(code=1008, reason="Invalid or expired token")
