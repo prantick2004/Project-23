@@ -8,6 +8,7 @@ from typing import Optional, List
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.repositories.attendance_repository import AttendanceRepository
 from app.infrastructure.database.models.attendance import AttendanceRecord
@@ -56,12 +57,25 @@ class AttendanceService:
                 status=status_value,
             )
             self.db.add(record)
-        else:
-            record.check_in_time = timestamp
-            record.check_in_camera_id = camera_id
-            record.check_in_confidence = confidence
-            record.status = status_value
+            try:
+                await self.db.commit()
+            except IntegrityError:
+                # A concurrent camera/worker inserted the same
+                # (employee_id, work_date) first — the DB unique constraint
+                # rejected this one. Roll back, then treat the winner's row as
+                # the existing check-in (first check-in wins; never overwrite).
+                await self.db.rollback()
+                record = await self.repo.get_by_employee_and_date(employee.id, work_date)
+                if record is None:
+                    raise  # genuinely unexpected — surface it
+                return record
+            await self.db.refresh(record)
+            return record
 
+        record.check_in_time = timestamp
+        record.check_in_camera_id = camera_id
+        record.check_in_confidence = confidence
+        record.status = status_value
         await self.db.commit()
         await self.db.refresh(record)
         return record
