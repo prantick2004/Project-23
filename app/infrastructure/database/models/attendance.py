@@ -3,7 +3,7 @@ AttendanceRecord ORM model.
 """
 import uuid
 from datetime import datetime, date
-from sqlalchemy import Date, DateTime, Float, Boolean, Text, ForeignKey, Enum as SAEnum
+from sqlalchemy import Date, DateTime, Float, Boolean, Text, ForeignKey, UniqueConstraint, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.infrastructure.database.connection import Base
@@ -11,6 +11,11 @@ from app.core.constants import AttendanceStatus
 
 class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
+    # Business rule: exactly one attendance record per employee per work_date.
+    # DB-enforced so concurrent cameras/workers cannot create duplicates.
+    __table_args__ = (
+        UniqueConstraint("employee_id", "work_date", name="uq_attendance_employee_workdate"),
+    )
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
