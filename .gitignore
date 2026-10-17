@@ -18,6 +18,10 @@ alembic/versions/__pycache__/
 live_view.html
 *.pdf
 
+ live-webcam-demo
+# Local live-webcam demo screenshots (never commit; may contain faces)
+demo_evidence/
+
 # --- Secrets & credentials (never commit) ---
 .env.*
 !.env.example
@@ -44,3 +48,4 @@ frontend/dist/
 # --- Frontend assets that must be committed (root rules above ignore png/mp4) ---
 !frontend/src/assets/*.png
 !frontend/public/videos/*.mp4
+main
