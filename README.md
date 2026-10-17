@@ -1,285 +1,275 @@
 # 🧠 Project-23 — AI-Powered Smart Employee Monitoring & Attendance System
 
-> A production-ready, full-stack backend system for automated employee attendance tracking using **facial recognition**, real-time camera streams, and intelligent alerting — built with **FastAPI**, **PostgreSQL**, **Celery**, and **Docker**.
+> A full-stack CCTV employee-monitoring platform: a **React + TypeScript** dashboard frontend and a
+> **FastAPI** backend that uses **facial recognition** and **YOLO** activity detection on live camera
+> feeds for automated attendance and workplace-activity monitoring — backed by **PostgreSQL**,
+> **Redis**, **Celery**, and **Docker**.
 
 ---
 
-## ✨ Features
+## ✨ What's inside
 
-- 🎭 **Face Recognition Attendance** — Automated check-in/check-out via live camera feeds using `face_recognition` + `dlib`
-- 📷 **Multi-Camera Management** — Register, stream, and manage multiple IP/webcam sources with real-time WebSocket feeds
-- 👥 **Employee & Department Management** — Full CRUD with photo upload, shift scheduling, and department grouping
-- 📊 **Dashboard & Reports** — Real-time attendance stats, exportable Excel/PDF reports via Celery background tasks
-- 🚨 **Alert System** — Configurable alerts for anomalies (unauthorized access, late arrivals, etc.) streamed via WebSocket
-- 🔐 **JWT Authentication** — Secure access & refresh token flow with role-based access control
-- 🛡️ **Evidence Storage** — Screenshot and video clip evidence linked to attendance and activity events
-- 📈 **Prometheus Metrics** — Built-in monitoring via `/metrics` endpoint
-- ⚡ **Rate Limiting** — Per-IP rate limiting (100 req/min default) via `slowapi`
-- 🐳 **Fully Dockerized** — Multi-service Docker Compose setup with Nginx reverse proxy
+**Backend (FastAPI)**
+- 🎭 **Face-recognition attendance** — automated check-in/check-out from live camera feeds (`face_recognition` + `dlib`)
+- 🤖 **Activity detection** — mobile-phone use, drowsiness/sleeping (eye-closure + posture), and restricted-zone checks via YOLOv8
+- 📷 **Multi-camera management** — register and stream USB / IP / RTSP cameras, with live JPEG over WebSocket
+- 👥 **Employee & department management** — full CRUD, photo upload with content validation, shift scheduling
+- 📊 **Dashboard & reports** — real-time KPIs, exportable Excel/PDF reports via Celery background tasks
+- 🚨 **Alerts & evidence** — activity alerts over WebSocket, with screenshot evidence linked to events
+- 📈 **Prometheus metrics** at `/metrics`
+
+**Frontend (React + Vite)**
+- 💻 **Premium dashboard UI** — public landing/marketing pages plus role-aware Admin and Employee dashboards
+- 🎨 Glassmorphism design, iPad-style floating navigation, charts, and a CCTV-style login
+- 🧩 Built with a clean **services/mock-data layer**, so the real backend can be wired in without rebuilding the UI
+- ⚠️ Currently runs on **mock data** (not yet connected to the backend API)
+
+**Security (hardened — see [Security](#-security))**
+- 🔐 JWT access/refresh flow with **access-token-type enforcement** and Redis-backed revocation (logout)
+- 🛡️ Role-based access control: **ADMIN / OPERATOR / VIEWER** (enforced server-side on the DB role)
+- 🚦 Real per-route **rate limiting** (`slowapi`), WebSocket authentication, strict CORS allow-list
+- ✅ Input validation, upload/path-traversal protection, and clean error responses
+
+**Local tooling**
+- 🎥 **Live webcam demo** — try the detection pipeline with your laptop camera before connecting real CCTV (see [below](#-live-webcam-demo))
+- 🧪 **Automated test suite** — 141 tests (`pytest`) covering auth, authorization, validation, attendance concurrency, and the demo
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Project structure
 
 ```
 Project-23/
-├── app/
-│   ├── api/                    # FastAPI layer
-│   │   ├── main.py             # Application entry point
-│   │   ├── dependencies.py     # Shared DI (auth, DB sessions)
-│   │   ├── routers/v1/         # REST API routes (auth, employees, departments, cameras, attendance, alerts, reports, dashboard)
-│   │   └── websockets/         # WebSocket streams (camera, alert, attendance)
-│   ├── core/                   # Config, logging, constants
-│   ├── domain/                 # Domain entities & business rules
-│   ├── application/            # Use-case / application layer
-│   ├── services/               # Business logic services
-│   ├── repositories/           # SQLAlchemy async DB repositories
-│   ├── schemas/                # Pydantic request/response schemas
+├── frontend/                   # React + Vite + TypeScript dashboard (mock data)
+│   ├── src/
+│   │   ├── pages/              # public, auth, admin, employee pages
+│   │   ├── components/         # UI, charts, layout, cameras, auth
+│   │   ├── services/           # mock data + API-boundary (swap for real backend later)
+│   │   └── ...
+│   └── package.json
+│
+├── app/                        # FastAPI backend
+│   ├── api/                    # routers (v1), websockets, dependencies, rate limiting
+│   ├── core/                   # config, security (JWT/bcrypt), logging, constants
+│   ├── services/               # business logic (attendance, activity, reports, ...)
+│   ├── repositories/           # async SQLAlchemy data access
+│   ├── schemas/                # Pydantic request/response models
 │   ├── infrastructure/
-│   │   ├── ai/                 # AI model registry (YOLO, face recognition)
-│   │   ├── camera/             # Camera stream manager & main loop
-│   │   ├── database/           # SQLAlchemy models & connection
-│   │   └── storage/            # Local file storage service
-│   └── workers/                # Celery tasks & beat scheduler
-├── migrations/                 # Alembic migration scripts
-├── scripts/                    # Utility/entrypoint shell scripts
+│   │   ├── ai/                 # YOLO + face-recognition model registry & detectors
+│   │   ├── camera/             # camera stream manager (USB/IP/RTSP)
+│   │   ├── database/           # SQLAlchemy models & async connection
+│   │   └── storage/            # media / evidence handling
+│   ├── workers/                # Celery tasks & beat scheduler
+│   └── demo/                   # local live-webcam demo (isolated, no DB writes)
+│
+├── tests/                      # pytest suite (141 tests)
+├── migrations/                 # Alembic migrations
 ├── docker/                     # Nginx config & TLS certs
-├── models/                     # AI model weights (mounted volume)
-├── storage/                    # Uploaded files & evidence (mounted volume)
-├── logs/                       # Application logs (mounted volume)
-├── Dockerfile                  # FastAPI app image
-├── Dockerfile.worker           # Celery worker image
-└── docker-compose.yml          # Full stack orchestration
+├── docs/live_webcam_demo.md    # webcam demo guide
+├── Dockerfile / Dockerfile.worker
+└── docker-compose.yml          # full stack: postgres, redis, app, worker, beat, nginx
 ```
 
 ---
 
-## 🔌 API Overview
+## ⚙️ Tech stack
 
-All REST endpoints are prefixed with `/api/v1`.
-
-| Module         | Endpoints                                      |
-|----------------|------------------------------------------------|
-| **Auth**       | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` |
-| **Employees**  | `GET/POST /employees`, `GET/PUT/DELETE /employees/{id}`, `POST /employees/{id}/photo` |
-| **Departments**| `GET/POST /departments`, `GET/PUT/DELETE /departments/{id}` |
-| **Cameras**    | `GET/POST /cameras`, `GET/PUT/DELETE /cameras/{id}`, start/stop stream |
-| **Attendance** | `GET /attendance`, `GET /attendance/{id}`, manual override |
-| **Activities** | `GET /activities` — employee activity logs |
-| **Evidence**   | `GET /evidence` — screenshots & clips |
-| **Alerts**     | `GET /alerts`, acknowledge alerts |
-| **Reports**    | `POST /reports/generate`, `GET /reports/{id}/download` |
-| **Dashboard**  | `GET /dashboard/stats` — real-time KPIs |
-
-### WebSocket Streams
-
-| Stream              | URL                              |
-|---------------------|----------------------------------|
-| Camera live feed    | `ws://<host>/ws/camera/{id}`     |
-| Alert stream        | `ws://<host>/ws/alerts`          |
-| Attendance stream   | `ws://<host>/ws/attendance`      |
-
-Interactive API docs available at **`/docs`** (Swagger UI) and **`/redoc`**.
+| Layer | Technology |
+|---|---|
+| **Frontend** | React 19, Vite, TypeScript, Tailwind CSS v4, React Router, Recharts, Radix UI, Lucide |
+| **API** | FastAPI + Uvicorn |
+| **Database** | PostgreSQL 16 + SQLAlchemy 2.0 (async) + Alembic |
+| **Task queue** | Celery + Redis 7 |
+| **AI / CV** | face-recognition, dlib, OpenCV, PyTorch (CPU), YOLOv8 (Ultralytics) |
+| **Auth** | python-jose (JWT), passlib + bcrypt, slowapi (rate limiting) |
+| **Reports / monitoring** | ReportLab, OpenPyXL, Prometheus |
+| **Infra** | Docker + Docker Compose, Nginx 1.25 |
 
 ---
 
-## ⚙️ Tech Stack
-
-| Layer              | Technology                                      |
-|--------------------|-------------------------------------------------|
-| **API Framework**  | FastAPI 0.111 + Uvicorn                         |
-| **Database**       | PostgreSQL 16 + SQLAlchemy 2.0 (async)          |
-| **Migrations**     | Alembic                                         |
-| **Task Queue**     | Celery 5.4 + Redis 7 (broker & result backend)  |
-| **AI / CV**        | face-recognition, dlib, OpenCV, PyTorch, YOLO (Ultralytics) |
-| **Auth**           | python-jose (JWT), passlib + bcrypt             |
-| **Validation**     | Pydantic v2                                     |
-| **Reports**        | ReportLab (PDF), OpenPyXL (Excel)               |
-| **Monitoring**     | Prometheus + prometheus-fastapi-instrumentator  |
-| **Rate Limiting**  | slowapi                                         |
-| **Reverse Proxy**  | Nginx 1.25                                      |
-| **Containerization**| Docker + Docker Compose                        |
-
----
-
-## 🚀 Getting Started
+## 🚀 Getting started
 
 ### Prerequisites
+- [Docker](https://docs.docker.com/get-docker/) & Docker Compose
+- For local dev: Python 3.11+, Node.js 18+, and `cmake` / `libopenblas-dev` / `libgl1` (for dlib/OpenCV)
 
-- [Docker](https://docs.docker.com/get-docker/) & [Docker Compose](https://docs.docker.com/compose/) installed
-- (For local dev) Python 3.11+, `cmake`, `libopenblas-dev`, `libgl1`
-
----
-
-### 1. Clone & Configure
+### 1. Clone & configure
 
 ```bash
 git clone <your-repo-url> project-23
 cd project-23
-
-# Copy and fill in your environment variables
 cp .env.example .env
 ```
 
-Edit `.env` and set at minimum:
+Edit `.env` and set at least:
 
 ```env
-SECRET_KEY=<your-long-random-secret>
+SECRET_KEY=<long-random-secret>
 POSTGRES_USER=project23_user
-POSTGRES_PASSWORD=<your-db-password>
+POSTGRES_PASSWORD=<strong-db-password>
 POSTGRES_DB=project23_db
+DATABASE_URL=postgresql+asyncpg://project23_user:<strong-db-password>@localhost:5432/project23_db
 ```
 
----
+> **Never commit `.env`** — it is git-ignored. `.env.example` lists every variable with safe placeholders.
 
-### 2. Run with Docker Compose (Recommended)
+### 2. Run the backend with Docker Compose (recommended)
 
 ```bash
 docker compose up --build -d
 ```
 
-This starts:
-- `postgres` — PostgreSQL database
-- `redis` — Redis broker
-- `app` — FastAPI application (port 8000, internal)
-- `worker` — Celery worker
-- `beat` — Celery beat scheduler
-- `nginx` — Reverse proxy on ports **80** and **443**
-
-**Check health:**
+Starts: `postgres`, `redis`, `app` (FastAPI, internal :8000), `worker` (Celery),
+`beat` (Celery scheduler), and `nginx` (public entrypoint on **80 / 443**).
+Database migrations run automatically on app startup (`alembic upgrade head`).
 
 ```bash
-curl http://localhost/health
+curl -k https://localhost/health     # {"status":"healthy"}
 ```
 
----
+> If you rebuild the `app` image, also run `docker compose restart nginx` — Nginx caches the app's
+> container IP at start.
 
-### 3. Run Locally (Development)
+### 3. Run the frontend
 
 ```bash
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
+```
 
-# Install torch CPU-only FIRST (avoids pulling ~2GB of GPU/CUDA
-# packages on a laptop with no GPU — same approach Docker build uses)
-pip install torch==2.13.0 torchvision==0.28.0 \
-    --index-url https://download.pytorch.org/whl/cpu
+The frontend currently uses **mock data** and is not yet wired to the backend API.
 
-# Install remaining dependencies
+### 4. Backend local dev (without Docker)
+
+```bash
+python -m venv venv && source venv/bin/activate
+# CPU-only torch first (avoids ~2GB of CUDA packages)
+pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 
-# Start PostgreSQL and Redis (via Docker or locally)
-docker compose up postgres redis -d
-
-# Run database migrations
+docker compose up postgres redis -d      # just the data services
 alembic upgrade head
-
-# Start the API server
 uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
-
-# Start Celery worker (in a separate terminal)
-source venv/bin/activate
+# separate terminals:
 celery -A app.workers.celery_app worker --loglevel=info
-
-# Start Celery beat scheduler (in another terminal)
-source venv/bin/activate
 celery -A app.workers.celery_app beat --loglevel=info
 ```
 
 ---
 
-## 🗃️ Database Migrations
+## 🎥 Live webcam demo
+
+A **local-only** tool to see what the detection pipeline reports, using your laptop webcam — no CCTV,
+no database writes, no production evidence. Run from the repo root:
 
 ```bash
-# Apply all pending migrations
-alembic upgrade head
-
-# Create a new migration after model changes
-alembic revision --autogenerate -m "describe your change"
-
-# Rollback one migration
-alembic downgrade -1
+./venv/bin/python -m app.demo.live_webcam          # camera index 0
+./venv/bin/python -m app.demo.live_webcam --window-check   # GUI check, no camera
 ```
 
----
-
-## 🔒 Environment Variables
-
-| Variable                     | Description                                    | Default |
-|------------------------------|------------------------------------------------|---------|
-| `APP_NAME`                   | Application name                               | `Project-23` |
-| `APP_VERSION`                | Application version                            | `1.0.0` |
-| `DEBUG`                      | Enable debug mode                              | `True` |
-| `SECRET_KEY`                 | JWT signing secret (**change in production!**) | — |
-| `ACCESS_TOKEN_EXPIRE_MINUTES`| Access token TTL                               | `30` |
-| `REFRESH_TOKEN_EXPIRE_DAYS`  | Refresh token TTL                              | `7` |
-| `DATABASE_URL`               | Full async PostgreSQL URL                      | — |
-| `REDIS_URL`                  | Redis connection URL                           | `redis://localhost:6379/0` |
-| `STORAGE_PATH`               | Path for uploaded files                        | `./storage` |
-| `MAX_UPLOAD_SIZE_MB`         | Max file upload size                           | `10` |
-| `FACE_RECOGNITION_TOLERANCE` | Face matching sensitivity (lower = stricter)   | `0.55` |
-| `FACE_RECOGNITION_MODEL`     | `hog` (CPU) or `cnn` (GPU)                    | `hog` |
-| `ENCODING_CACHE_SIZE`        | In-memory face encoding cache limit            | `1000` |
-| `LATE_THRESHOLD_MINUTES`     | Minutes after shift start to flag as late      | `15` |
-| `ATTENDANCE_COOLDOWN_MINUTES`| Minimum gap between attendance records         | `5` |
-| `EVIDENCE_RETENTION_DAYS`    | Days to keep evidence files before cleanup     | `90` |
-| `EMAIL_ENABLED`              | Enable email notifications                     | `False` |
-| `SMS_ENABLED`                | Enable SMS notifications                       | `False` |
+Green boxes = person detected (normal); red boxes = a violation (phone / eye-closure sleeping).
+Screenshots are saved only to **`demo_evidence/`** (git-ignored; may contain faces). Press `q` / `Esc`
+to quit. Full guide: **[docs/live_webcam_demo.md](docs/live_webcam_demo.md)**.
 
 ---
 
-## 📦 Key Services
+## 🔌 API overview
 
-### Face Encoding Service
-Loads and caches face encodings from the database at startup. Re-triggered when employee photos are updated.
+All REST endpoints are under `/api/v1`. Interactive docs at **`/docs`** (Swagger) and **`/redoc`**.
+All non-auth routes require a Bearer **access** token; each is guarded by a role
+(**ADMIN / OPERATOR / VIEWER**). Employees are monitored records, not login users.
 
-### Camera Stream Manager
-Manages concurrent camera threads with start/stop lifecycle hooks. Passes frames through the AI pipeline for face detection, attendance logging, and evidence capture.
+| Module | Endpoints (examples) |
+|---|---|
+| **Auth** | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me` |
+| **Employees** | `GET/POST /employees`, `GET/PUT/DELETE /employees/{id}`, `POST /employees/{id}/photo`, `GET /employees/{id}/photo` |
+| **Departments** | `GET/POST /departments`, `GET/PUT/DELETE /departments/{id}` |
+| **Cameras** | `GET/POST /cameras`, `GET/PUT/DELETE /cameras/{id}`, `POST /cameras/{id}/start|stop`, `GET /cameras/{id}/snapshot` |
+| **Attendance** | `GET /attendance`, `GET /attendance/today`, `GET /attendance/employee/{id}`, `PUT /attendance/{id}` (admin override) |
+| **Activities** | `GET /activities`, `PUT /activities/{id}/resolve` |
+| **Evidence** | `GET /evidence`, `GET /evidence/{id}/screenshot` |
+| **Alerts** | `GET /alerts`, `PUT /alerts/{id}/acknowledge` |
+| **Reports** | `POST /reports/attendance|activity|incidents`, `GET /reports/jobs/{id}`, `GET /reports/download/{filename}` |
+| **Dashboard** | `GET /dashboard/stats`, `/dashboard/cameras`, `/dashboard/attendance/live`, `/dashboard/alerts/recent` |
 
-### Report Tasks (Celery)
-Background tasks for generating attendance and activity reports in Excel/PDF format, available for async download.
+### WebSocket streams (require `?token=<access-token>`)
 
----
-
-## 📊 Monitoring
-
-- **Health check**: `GET /health`
-- **Prometheus metrics**: `GET /metrics`
-- **API docs**: `GET /docs` (Swagger), `GET /redoc`
-
----
-
-## 🐳 Docker Services
-
-| Service   | Image                   | Port (Internal) | Notes                         |
-|-----------|-------------------------|-----------------|-------------------------------|
-| postgres  | `postgres:16-alpine`    | 5432            | Exposed to host in dev mode   |
-| redis     | `redis:7-alpine`        | 6379            | Internal only                 |
-| app       | `./Dockerfile`          | 8000            | Behind Nginx                  |
-| worker    | `./Dockerfile.worker`   | —               | Celery worker                 |
-| beat      | `./Dockerfile.worker`   | —               | Celery beat scheduler         |
-| nginx     | `nginx:1.25-alpine`     | **80, 443**     | Public entrypoint             |
+| Stream | URL |
+|---|---|
+| Camera live feed | `wss://<host>/ws/stream/{camera_id}` |
+| Alert stream | `wss://<host>/ws/alerts` |
+| Attendance stream | `wss://<host>/ws/attendance` |
 
 ---
 
-## 📁 Volume Mounts
+## 🧪 Testing
 
-| Host Path    | Container Path      | Purpose                          |
-|--------------|---------------------|----------------------------------|
-| `./storage`  | `/app/storage`      | Employee photos & evidence files |
-| `./models`   | `/app/models`       | AI model weights                 |
-| `./logs`     | `/app/logs`         | Structured application logs      |
+```bash
+./venv/bin/python -m pytest tests/ -q     # 141 tests
+```
+
+Covers authentication, role authorization, input validation & path-traversal, attendance-concurrency
+(real-PostgreSQL), and the webcam demo (mocked camera/window/pipeline).
 
 ---
 
-## 🛡️ Security Notes
+## 🔒 Security
 
-- All media files are served through authenticated API endpoints (not as public static files)
-- JWT-based auth with configurable expiry for both access and refresh tokens
-- Rate limiting enabled globally at 100 req/min per IP
-- Non-root Docker user (`appuser`) for the application container
-- **Do not expose PostgreSQL port (5432) in production** — remove the `ports` mapping in `docker-compose.yml`
+- **JWT auth** — access & refresh tokens; `get_current_user` rejects a refresh token used as an access token; logout revokes tokens via a Redis blocklist.
+- **Authorization** — ADMIN / OPERATOR / VIEWER enforced server-side on the **database** role, not the token claim (no privilege escalation by tampering).
+- **Rate limiting** — `SlowAPIMiddleware` enforces a global default (100/min per IP); `/auth/login` is limited to 5/min; login timing is equalised to prevent username enumeration.
+- **CORS** — explicit allow-list from `CORS_ALLOWED_ORIGINS` (no wildcard with credentials).
+- **WebSockets** — all streams require a valid access token.
+- **Validation** — bounded pagination, parameterised queries, content-verified image uploads with server-generated filenames, and clean error responses (no stack traces / secrets).
+- **Secrets** — `.env` is git-ignored; `DEBUG` defaults to `False`; Postgres/Redis host ports bind to `127.0.0.1` only.
+
+> ⚠️ Dev notes: the Postgres/Redis `127.0.0.1` port mappings and the self-signed TLS cert are for local
+> development — remove/replace them for a real deployment. Always use a fresh, strong `SECRET_KEY` and
+> database password.
+
+---
+
+## 🐳 Docker services & volumes
+
+| Service | Image | Port | Notes |
+|---|---|---|---|
+| postgres | `postgres:16-alpine` | `127.0.0.1:5432` | data in named volume `postgres_data` |
+| redis | `redis:7-alpine` | `127.0.0.1:6379` | broker + token blocklist |
+| app | `./Dockerfile` | 8000 (internal) | behind Nginx |
+| worker | `./Dockerfile.worker` | — | Celery worker |
+| beat | `./Dockerfile.worker` | — | Celery scheduler |
+| nginx | `nginx:1.25-alpine` | **80, 443** | public entrypoint |
+
+| Host path | Container path | Purpose |
+|---|---|---|
+| `./media` | `/app/media` | employee photos & evidence (git-ignored) |
+| `./models` | `/app/models` | AI model weights (git-ignored) |
+| `./logs` | `/app/logs` | application logs (git-ignored) |
+
+> **Safe to stop:** `docker compose stop` or `docker compose down` keep your data.
+> **Do NOT run** `docker compose down -v` — it deletes the database volume.
+
+---
+
+## 🔑 Key environment variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `SECRET_KEY` | JWT signing secret (**required**, change in production) | — |
+| `DEBUG` | Debug logging + SQL echo | `False` |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed browser origins | `http://localhost:5173,http://localhost:4173` |
+| `DATABASE_URL` | Async PostgreSQL URL | — |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | DB credentials used by the containers | — |
+| `REDIS_URL` | Redis connection URL | `redis://localhost:6379/0` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` / `REFRESH_TOKEN_EXPIRE_DAYS` | Token TTLs | `30` / `7` |
+| `MEDIA_PATH` | Base path for uploaded files & evidence | `./media` |
+| `MAX_UPLOAD_SIZE_MB` | Max upload size | `10` |
+| `FACE_RECOGNITION_TOLERANCE` / `FACE_RECOGNITION_MODEL` | Match sensitivity / `hog`\|`cnn` | `0.55` / `hog` |
+| `LATE_THRESHOLD_MINUTES` / `ATTENDANCE_COOLDOWN_MINUTES` | Attendance tuning | `15` / `5` |
+| `EVIDENCE_RETENTION_DAYS` | Evidence cleanup window | `90` |
+
+See `.env.example` for the complete list.
 
 ---
 
