@@ -1,112 +1,120 @@
-// ============================================================================
-// Domain types — mirror (loosely) the existing Python backend's schemas.
-// These are frontend contracts only; no network calls are made yet.
-// When the backend is connected, keep these interfaces in sync with
-// app/schemas/*.py response models.
-// ============================================================================
+export type Role = 'admin' | 'employee'
 
-export type EmployeeStatus = "active" | "inactive" | "suspended" | "terminated";
+export interface SessionUser {
+  id: string
+  role: Role
+  name: string
+  employeeId: string
+  email: string
+}
+
+export type EmployeeStatus = 'detected' | 'away' | 'absent'
 
 export interface Employee {
-  id: string;
-  employeeId: string; // e.g. "EMP-0001"
-  firstName: string;
-  lastName: string;
-  email: string;
-  mobile: string;
-  storeId: string;
-  storeName: string;
-  department: string;
-  position: string;
-  status: EmployeeStatus;
-  photoUrl?: string;
-  joinedAt: string;
+  id: string
+  employeeId: string
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  department: string
+  jobTitle: string
+  status: EmployeeStatus
+  lastDetectedAt: string
+  lastCameraId: string
+  attendancePct: number
+  phoneEvents: number
+  sleepingEvents: number
 }
 
-export type CameraStatus = "online" | "offline" | "connecting" | "error";
-export type CameraType = "usb" | "ip" | "rtsp" | "cctv";
+export type CameraStatus = 'online' | 'offline' | 'degraded'
 
 export interface Camera {
-  id: string;
-  cameraId: string; // e.g. "CAM-LOBBY-01"
-  name: string;
-  storeId: string;
-  storeName: string;
-  type: CameraType;
-  status: CameraStatus;
-  location: string;
-  previewImage?: string;
+  id: string
+  code: string
+  name: string
+  location: string
+  status: CameraStatus
+  lastFrameAt: string
+  employeeCount: number
+  detectionCount: number
+  phoneCount: number
+  sleepingCount: number
+  /** Hue seed used to render the simulated frame. */
+  scene: 'open-office' | 'meeting' | 'lobby' | 'workshop' | 'corridor' | 'support'
 }
 
-export interface Store {
-  id: string;
-  storeId: string;
-  name: string;
-  address: string;
-  managerName: string;
-  employeeCount: number;
-  cameraCount: number;
-  status: "active" | "inactive";
+export type DetectionType = 'phone' | 'sleeping' | 'presence'
+export type Severity = 'info' | 'low' | 'medium'
+export type IncidentStatus = 'new' | 'reviewed' | 'dismissed'
+
+export interface DetectionEvent {
+  id: string
+  type: DetectionType
+  employeeId: string
+  employeeName: string
+  cameraId: string
+  cameraName: string
+  timestamp: string
+  durationSec: number
+  confidence: number
+  severity: Severity
+  status: IncidentStatus
 }
 
-export type AttendanceStatus = "present" | "absent" | "late" | "half_day" | "on_leave";
+export type AttendanceState = 'present' | 'absent' | 'weekend' | 'leave'
 
 export interface AttendanceRecord {
-  id: string;
-  employeeId: string;
-  employeeName: string;
-  storeName: string;
-  date: string;
-  checkIn?: string;
-  checkOut?: string;
-  status: AttendanceStatus;
-  durationHours?: number;
-}
-
-export type ActivityType =
-  | "entry_event"
-  | "exit_event"
-  | "zone_event"
-  | "activity_detected"
-  | "review_required";
-
-export interface ActivityEvent {
-  id: string;
-  type: ActivityType;
-  employeeName?: string;
-  storeName: string;
-  cameraName: string;
-  timestamp: string;
-  status: "new" | "reviewed" | "review_required" | "dismissed";
-}
-
-export type AlertSeverity = "info" | "low" | "medium" | "high" | "critical";
-
-export interface AlertItem {
-  id: string;
-  type: string;
-  severity: AlertSeverity;
-  storeName: string;
-  cameraName?: string;
-  timestamp: string;
-  status: "unread" | "read" | "resolved";
-  message: string;
+  date: string // YYYY-MM-DD
+  employeeId: string
+  state: AttendanceState
+  firstDetectedAt?: string
+  lastDetectedAt?: string
+  detectedMinutes?: number
 }
 
 export interface DashboardStats {
-  totalEmployees: number;
-  activeEmployees: number;
-  totalStores: number;
-  onlineCameras: number;
-  offlineCameras: number;
-  todayAttendance: number;
+  totalEmployees: number
+  detectedNow: number
+  totalCameras: number
+  onlineCameras: number
+  offlineCameras: number
+  phoneDetections: number
+  sleepingDetections: number
+  attendanceToday: number
+  attendancePctToday: number
+  hourlyActivity: { hour: string; employees: number; phone: number; sleeping: number }[]
 }
 
-export interface ReportDefinition {
-  id: string;
-  title: string;
-  type: "employee_activity" | "attendance" | "store" | "cctv_status" | "alerts";
-  description: string;
+export interface TrendPoint {
+  label: string
+  attendance: number
+  phone: number
+  sleeping: number
+  presence: number
 }
 
-export type UserRole = "admin" | "employee";
+export type TrendRange = 'daily' | 'weekly' | 'monthly'
+
+export interface CameraActivityPoint {
+  camera: string
+  events: number
+  employees: number
+}
+
+export interface EmployeeSummary {
+  daysAttended: number
+  workingDays: number
+  daysDetected: number
+  attendancePct: number
+  phoneEvents: number
+  sleepingEvents: number
+}
+
+export interface Notification {
+  id: string
+  title: string
+  body: string
+  time: string
+  read: boolean
+}
