@@ -17,3 +17,6 @@ alembic/versions/__pycache__/
 !docs/**/*.png
 live_view.html
 *.pdf
+
+# Local live-webcam demo screenshots (never commit; may contain faces)
+demo_evidence/
